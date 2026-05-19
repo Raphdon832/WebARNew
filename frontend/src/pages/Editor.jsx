@@ -9,6 +9,15 @@ import {
   uploadModel,
   uploadVideo
 } from "../api/uploads";
+import {
+  createDefaultVideoOptions,
+  normalizeVideoOptions,
+  toInputVideoOptions
+} from "../lib/videoOptions";
+import {
+  compileMindFileFromImageFile,
+  compileMindFileFromImageUrl
+} from "../lib/mindFileCompiler";
 
 const createDefaultTransform = (type = "model") => ({
   position: { x: "0", y: "0", z: "0" },
@@ -54,11 +63,14 @@ const Editor = () => {
   const [contentUrl, setContentUrl] = useState("");
   const [labelText, setLabelText] = useState("");
   const [transform, setTransform] = useState(createDefaultTransform("model"));
+  const [videoOptions, setVideoOptions] = useState(createDefaultVideoOptions());
   const [projectSlug, setProjectSlug] = useState(null);
   const [saving, setSaving] = useState(false);
   const [loadingProject, setLoadingProject] = useState(Boolean(isEditing));
   const [markerUploading, setMarkerUploading] = useState(false);
   const [mindUploading, setMindUploading] = useState(false);
+  const [mindCompiling, setMindCompiling] = useState(false);
+  const [mindCompileProgress, setMindCompileProgress] = useState(0);
   const [contentUploading, setContentUploading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -85,6 +97,7 @@ const Editor = () => {
         setContentUrl(config.contentUrl || "");
         setLabelText(config.labelText || "");
         setTransform(toInputTransform(config.transform, nextType));
+        setVideoOptions(toInputVideoOptions(config.videoOptions));
         setProjectSlug(project.slug || null);
       })
       .catch((err) => {
@@ -136,6 +149,13 @@ const Editor = () => {
     });
   };
 
+  const handleVideoOptionChange = (key, value) => {
+    setVideoOptions((prev) => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
   const uploadAsset = async (uploadFn, file, setUploading, onSuccess) => {
     if (!file) return;
     setUploading(true);
@@ -151,8 +171,73 @@ const Editor = () => {
     }
   };
 
-  const handleMarkerImageUpload = (file) =>
-    uploadAsset(uploadMarkerImage, file, setMarkerUploading, setMarkerImageUrl);
+  const generateMindFilename = (name = "marker") => {
+    const base = name.replace(/\.[^/.]+$/, "") || "marker";
+    return `${base}-${Date.now()}.mind`;
+  };
+
+  const handleGenerateMindFromMarker = async ({ file, markerUrl, silentError } = {}) => {
+    const sourceUrl = markerUrl || markerImageUrl;
+    if (!file && !sourceUrl) {
+      setError("Provide a marker image first, then generate the .mind target file");
+      return false;
+    }
+
+    setMindCompiling(true);
+    setMindCompileProgress(0);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const compiledBlob = file
+        ? await compileMindFileFromImageFile(file, (progress) => setMindCompileProgress(progress))
+        : await compileMindFileFromImageUrl(sourceUrl, (progress) => setMindCompileProgress(progress));
+
+      const compiledFileName = generateMindFilename(file?.name || "marker");
+      const compiledFile = new File([compiledBlob], compiledFileName, {
+        type: "application/octet-stream"
+      });
+
+      setMindUploading(true);
+      const uploadResult = await uploadMarkerTarget(compiledFile);
+      setMindFileUrl(uploadResult.url);
+      setSuccess("Marker target (.mind) generated and attached automatically.");
+      return true;
+    } catch (err) {
+      const fallbackMessage =
+        "Automatic .mind generation failed. You can still upload a .mind file manually.";
+      if (!silentError) {
+        setError(
+          err?.message?.includes("Failed to load marker image")
+            ? "Could not read marker image for compilation. If using external URL, ensure it allows CORS."
+            : err.response?.data?.message || fallbackMessage
+        );
+      }
+      return false;
+    } finally {
+      setMindCompiling(false);
+      setMindUploading(false);
+      setMindCompileProgress(0);
+    }
+  };
+
+  const handleMarkerImageUpload = async (file) => {
+    if (!file) return;
+
+    setMarkerUploading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const { url } = await uploadMarkerImage(file);
+      setMarkerImageUrl(url);
+      await handleGenerateMindFromMarker({ file, markerUrl: url, silentError: false });
+    } catch (err) {
+      setError(err.response?.data?.message || "Marker image upload failed");
+    } finally {
+      setMarkerUploading(false);
+    }
+  };
 
   const handleMindFileUpload = (file) =>
     uploadAsset(uploadMarkerTarget, file, setMindUploading, setMindFileUrl);
@@ -202,6 +287,8 @@ const Editor = () => {
       return;
     }
 
+    const normalizedVideoOptions = normalizeVideoOptions(videoOptions);
+
     setSaving(true);
     setError(null);
     setSuccess(null);
@@ -215,7 +302,8 @@ const Editor = () => {
           contentType,
           contentUrl,
           labelText,
-          transform: normalizedTransform
+          transform: normalizedTransform,
+          videoOptions: normalizedVideoOptions
         }
       };
 
@@ -260,6 +348,8 @@ const Editor = () => {
           contentUrl={contentUrl}
           labelText={labelText}
           transform={transform}
+          videoOptions={videoOptions}
+          onTransformChange={handleTransformChange}
           name={name}
         />
         <div className="editor-panel">
@@ -281,9 +371,14 @@ const Editor = () => {
             onContentUpload={handleContentUpload}
             markerUploading={markerUploading}
             mindUploading={mindUploading}
+            mindCompiling={mindCompiling}
+            mindCompileProgress={mindCompileProgress}
             contentUploading={contentUploading}
             transform={transform}
             onTransformChange={handleTransformChange}
+            videoOptions={videoOptions}
+            onVideoOptionChange={handleVideoOptionChange}
+            onGenerateMindFromMarker={() => handleGenerateMindFromMarker()}
             onSave={handleSave}
             saving={saving}
           />

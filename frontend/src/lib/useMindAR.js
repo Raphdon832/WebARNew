@@ -51,7 +51,7 @@ const loadExternalScript = (id, src) =>
     document.head.appendChild(script);
   });
 
-const loadMindAR = async () => {
+export const ensureMindARLoaded = async () => {
   if (typeof window === "undefined") return;
   if (window.AFRAME && window.MINDAR?.IMAGE) return;
 
@@ -74,7 +74,7 @@ export const useMindAR = () => {
   useEffect(() => {
     let active = true;
 
-    loadMindAR()
+    ensureMindARLoaded()
       .then(() => {
         if (active) setReady(true);
       })

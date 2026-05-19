@@ -57,6 +57,22 @@ router.get("/", authRequired, async (req, res) => {
   }
 });
 
+router.get("/slug/:slug", async (req, res) => {
+  try {
+    const project = await findProjectBySlug(req.params.slug);
+    if (!project) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    await incrementProjectView(project.id);
+    const updatedProject = await findProjectBySlug(req.params.slug);
+    res.json(updatedProject || project);
+  } catch (err) {
+    console.error("Fetch project error", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 router.get("/:id", authRequired, async (req, res) => {
   try {
     const project = await findProjectById(req.params.id);
@@ -105,22 +121,6 @@ router.delete("/:id", authRequired, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error("Delete project error", err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-router.get("/slug/:slug", async (req, res) => {
-  try {
-    const project = await findProjectBySlug(req.params.slug);
-    if (!project) {
-      return res.status(404).json({ message: "Not found" });
-    }
-
-    await incrementProjectView(project.id);
-    const updatedProject = await findProjectBySlug(req.params.slug);
-    res.json(updatedProject || project);
-  } catch (err) {
-    console.error("Fetch project error", err);
     res.status(500).json({ message: "Server error" });
   }
 });

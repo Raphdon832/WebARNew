@@ -19,9 +19,14 @@ const ProjectForm = ({
   onContentUpload,
   markerUploading,
   mindUploading,
+  mindCompiling,
+  mindCompileProgress,
   contentUploading,
   transform,
   onTransformChange,
+  videoOptions = {},
+  onVideoOptionChange,
+  onGenerateMindFromMarker,
   onSave,
   saving
 }) => {
@@ -39,6 +44,21 @@ const ProjectForm = ({
     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
     gap: 10,
     marginTop: 8
+  };
+
+  const booleanGridStyle = {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 10,
+    marginTop: 8
+  };
+
+  const optionCardStyle = {
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.15)",
+    background: "rgba(255,255,255,0.02)"
   };
 
   const renderVectorInputs = (label, group, step = "0.01") => (
@@ -61,6 +81,30 @@ const ProjectForm = ({
         ))}
       </div>
     </div>
+  );
+
+  const renderVideoToggle = (key, label) => (
+    <label
+      key={key}
+      style={{
+        fontSize: 13,
+        color: "rgba(255,255,255,0.85)",
+        display: "flex",
+        gap: 8,
+        alignItems: "center",
+        border: "1px solid rgba(255,255,255,0.12)",
+        padding: "8px 10px",
+        borderRadius: 8,
+        background: "rgba(4,10,24,0.45)"
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={Boolean(videoOptions?.[key])}
+        onChange={(e) => onVideoOptionChange(key, e.target.checked)}
+      />
+      {label}
+    </label>
   );
 
   return (
@@ -109,6 +153,29 @@ const ProjectForm = ({
         <small style={{ display: "block", marginTop: 6, color: "rgba(255,255,255,0.65)" }}>
           MindAR needs the generated .mind target file that matches your marker image.
         </small>
+        <button
+          type="button"
+          onClick={onGenerateMindFromMarker}
+          disabled={markerUploading || mindUploading || mindCompiling}
+          style={{
+            marginTop: 10,
+            padding: "8px 12px",
+            borderRadius: 8,
+            border: "1px solid rgba(120,216,255,0.45)",
+            background: "rgba(24,122,174,0.18)",
+            color: "#d7f2ff",
+            cursor: "pointer",
+            fontWeight: 600,
+            fontSize: 13
+          }}
+        >
+          {mindCompiling ? "Generating .mind..." : "Generate .mind From Marker Image"}
+        </button>
+        {mindCompiling && (
+          <small style={{ display: "block", marginTop: 6, color: "rgba(255,255,255,0.72)" }}>
+            Compiling marker target: {Math.round(mindCompileProgress || 0)}%
+          </small>
+        )}
         {mindUploading && (
           <small style={{ display: "block", marginTop: 6 }}>Uploading marker target...</small>
         )}
@@ -174,15 +241,7 @@ const ProjectForm = ({
         )}
       </label>
 
-      <div
-        style={{
-          marginBottom: 16,
-          padding: 12,
-          borderRadius: 10,
-          border: "1px solid rgba(255,255,255,0.15)",
-          background: "rgba(255,255,255,0.02)"
-        }}
-      >
+      <div style={optionCardStyle}>
         <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>
           {contentType === "video" ? "Video Placement" : "Object Placement"}
         </h3>
@@ -194,6 +253,84 @@ const ProjectForm = ({
         {renderVectorInputs("Rotation (degrees)", "rotation", "1")}
         {renderVectorInputs("Scale", "scale")}
       </div>
+
+      {contentType === "video" && (
+        <div style={optionCardStyle}>
+          <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Video Playback & Display</h3>
+          <small style={{ display: "block", marginBottom: 10, color: "rgba(255,255,255,0.65)" }}>
+            These options apply in both editor preview and published AR viewer.
+          </small>
+
+          <div style={booleanGridStyle}>
+            {renderVideoToggle("autoplay", "Autoplay")}
+            {renderVideoToggle("loop", "Loop")}
+            {renderVideoToggle("muted", "Muted")}
+            {renderVideoToggle("playsInline", "Play Inline")}
+            {renderVideoToggle("showControls", "Show Controls")}
+            {renderVideoToggle("maintainAspectRatio", "Maintain Aspect Ratio")}
+            {renderVideoToggle("invertAspectRatio", "Invert Aspect Ratio")}
+            {renderVideoToggle("flipHorizontal", "Flip Horizontal")}
+            {renderVideoToggle("flipVertical", "Flip Vertical")}
+            {renderVideoToggle("pauseWhenTargetLost", "Pause On Target Lost")}
+            {renderVideoToggle("restartOnTargetFound", "Restart On Target Found")}
+          </div>
+
+          <div style={{ marginTop: 14 }}>
+            <label style={{ display: "block", marginBottom: 10, fontSize: 13 }}>
+              <span style={{ display: "block", marginBottom: 6, color: "rgba(255,255,255,0.72)" }}>
+                Fit Mode
+              </span>
+              <select
+                value={videoOptions.fit}
+                style={vectorInputStyle}
+                onChange={(e) => onVideoOptionChange("fit", e.target.value)}
+              >
+                <option value="contain">Contain (recommended)</option>
+                <option value="cover">Cover</option>
+                <option value="fill">Fill</option>
+              </select>
+            </label>
+
+            <div style={vectorGridStyle}>
+              <label style={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }}>
+                Opacity (0 - 1)
+                <input
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  style={vectorInputStyle}
+                  value={videoOptions.opacity}
+                  onChange={(e) => onVideoOptionChange("opacity", e.target.value)}
+                />
+              </label>
+              <label style={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }}>
+                Playback Rate
+                <input
+                  type="number"
+                  min="0.25"
+                  max="3"
+                  step="0.05"
+                  style={vectorInputStyle}
+                  value={videoOptions.playbackRate}
+                  onChange={(e) => onVideoOptionChange("playbackRate", e.target.value)}
+                />
+              </label>
+              <label style={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }}>
+                Start Time (sec)
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  style={vectorInputStyle}
+                  value={videoOptions.startTimeSec}
+                  onChange={(e) => onVideoOptionChange("startTimeSec", e.target.value)}
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AssetUploader
         label="Label Text"
@@ -216,7 +353,7 @@ const ProjectForm = ({
           marginTop: 8
         }}
         onClick={onSave}
-        disabled={saving || markerUploading || mindUploading || contentUploading}
+        disabled={saving || markerUploading || mindUploading || mindCompiling || contentUploading}
       >
         {saving ? "Publishing..." : "Save & Publish"}
       </button>
