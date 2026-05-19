@@ -76,6 +76,15 @@ const Viewer = () => {
     };
   }, [ready, project]);
 
+  const normalizeAssetUrl = (url) => {
+    if (!url) return url;
+    if (window.location.protocol !== "https:") return url;
+    if (url.startsWith("http://")) {
+      return `https://${url.slice("http://".length)}`;
+    }
+    return url;
+  };
+
   if (error) return <p style={{ padding: 24 }}>{error}</p>;
   if (mindArError)
     return <p style={{ padding: 24 }}>Failed to load AR engine. Check console for details.</p>;
@@ -84,7 +93,8 @@ const Viewer = () => {
   const { markerImageUrl, mindFileUrl: explicitMindFileUrl, contentType, contentUrl, labelText } =
     project.config;
   const mindFileUrl =
-    explicitMindFileUrl || markerImageUrl?.replace(/\.(png|jpg|jpeg)$/i, ".mind");
+    normalizeAssetUrl(explicitMindFileUrl || markerImageUrl?.replace(/\.(png|jpg|jpeg)$/i, ".mind"));
+  const resolvedContentUrl = normalizeAssetUrl(contentUrl);
 
   if (!mindFileUrl) {
     return <p style={{ padding: 24 }}>Marker target (.mind) file is missing for this project.</p>;
@@ -140,7 +150,7 @@ const Viewer = () => {
             <video
               id="video-overlay"
               ref={videoRef}
-              src={contentUrl}
+              src={resolvedContentUrl}
               autoPlay
               muted
               loop
@@ -150,7 +160,7 @@ const Viewer = () => {
               webkit-playsinline="true"
             ></video>
           ) : (
-            <a-asset-item id="model" src={contentUrl}></a-asset-item>
+            <a-asset-item id="model" src={resolvedContentUrl}></a-asset-item>
           )}
         </a-assets>
 

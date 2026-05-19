@@ -84,7 +84,12 @@ const uploadMiddleware = (uploader) => (req, res, next) => {
 
 const toPublicUrl = (req, filePath) => {
   const relativePath = path.relative(uploadsRootDir, filePath).split(path.sep).join("/");
-  return `${req.protocol}://${req.get("host")}/uploads/${relativePath}`;
+  const forwardedProtocol = req.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const forwardedHost = req.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const protocol = forwardedProtocol || req.protocol;
+  const host = forwardedHost || req.get("host");
+
+  return `${protocol}://${host}/uploads/${relativePath}`;
 };
 
 const sendUploadResponse = (req, res) => {
