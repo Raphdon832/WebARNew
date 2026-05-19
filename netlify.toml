@@ -1,0 +1,10 @@
+[build]
+  command = "npm --prefix frontend ci && npm --prefix frontend run build"
+  publish = "frontend/dist"
+
+# Single-page app routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+

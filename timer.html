@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Christmas Carol Program Timer</title>
+  <style>
+    :root { --bg:#0b0b0c; --card:#141417; --text:#f2f2f2; --muted:#a0a0a5; --line:#25252b; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: var(--bg); color: var(--text);
+    }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 18px; }
+    header { display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom: 14px; }
+    h1 { font-size: 16px; margin:0; letter-spacing: .3px; }
+    .pill { font-size:12px; color: var(--muted); border:1px solid var(--line); padding:6px 10px; border-radius:999px; }
+    .grid { display:grid; gap:12px; grid-template-columns: 1fr; }
+    @media (min-width: 820px) { .grid { grid-template-columns: 1.1fr .9fr; } }
+
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+    .label { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+    .title { font-size: 16px; line-height: 1.35; margin: 0 0 10px; }
+    .timer {
+      font-variant-numeric: tabular-nums;
+      font-size: 56px; font-weight: 700; letter-spacing: 1px;
+      margin: 2px 0 6px;
+    }
+    .meta { display:flex; gap:10px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+    .meta span { border: 1px solid var(--line); padding: 6px 10px; border-radius: 999px; }
+
+    .controls { display:flex; gap:10px; flex-wrap:wrap; margin-top: 12px; }
+    button {
+      border: 1px solid var(--line); background: #101014; color: var(--text);
+      padding: 10px 12px; border-radius: 12px; cursor: pointer; font-weight: 600;
+    }
+    button:hover { filter: brightness(1.08); }
+    button.primary { background:#1c1c25; }
+    button.danger { background:#241015; }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+
+    .list { max-height: 520px; overflow:auto; padding-right: 6px; }
+    .item {
+      display:flex; gap:10px; align-items:flex-start;
+      padding: 10px; border-radius: 12px; border: 1px solid var(--line);
+      background: #111114; margin-bottom: 10px;
+    }
+    .idx {
+      width: 28px; height: 28px; border-radius: 10px; display:grid; place-items:center;
+      border:1px solid var(--line); color: var(--muted); font-size: 12px; flex:0 0 auto;
+    }
+    .item h3 { margin:0; font-size: 13px; line-height:1.35; }
+    .item p { margin:4px 0 0; font-size: 12px; color: var(--muted); }
+    .item.active { outline: 2px solid #2c2c38; background:#16161b; }
+    .row { display:flex; justify-content:space-between; gap:8px; }
+    .small { font-size:12px; color: var(--muted); }
+    .footer { margin-top: 10px; color: var(--muted); font-size: 12px; }
+    .toprow { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+    input[type="time"] {
+      background:#101014; color:var(--text); border:1px solid var(--line);
+      padding: 8px 10px; border-radius: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Christmas Carol Program Timer</h1>
+        <div class="small">Built for a 2:00 PM – 6:00 PM service (auto-advance enabled)</div>
+      </div>
+      <div class="toprow">
+        <span class="pill" id="clock">--:--:--</span>
+        <label class="pill" style="display:flex;gap:8px;align-items:center;">
+          Start time
+          <input id="startTime" type="time" value="14:00" />
+        </label>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <div class="label">Now</div>
+        <p class="title" id="nowTitle">—</p>
+        <div class="timer" id="countdown">00:00</div>
+        <div class="meta">
+          <span id="nowWindow">—</span>
+          <span id="nowDuration">—</span>
+          <span id="status">Stopped</span>
+        </div>
+
+        <div style="height:12px"></div>
+
+        <div class="label">Next</div>
+        <p class="title" id="nextTitle">—</p>
+        <div class="meta">
+          <span id="nextWindow">—</span>
+          <span id="nextDuration">—</span>
+        </div>
+
+        <div class="controls">
+          <button class="primary" id="btnStart">Start</button>
+          <button id="btnPause" disabled>Pause</button>
+          <button id="btnPrev">◀ Prev</button>
+          <button id="btnNext">Next ▶</button>
+          <button class="danger" id="btnReset">Reset</button>
+        </div>
+
+        <div class="footer">
+          Tip: Open this file in your phone browser. If you want sound alerts, I can add beeps/vibration.
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="row">
+          <div>
+            <div class="label">Program List</div>
+            <div class="small">Tap any item to jump to it</div>
+          </div>
+          <div class="small" id="totalInfo">Total: —</div>
+        </div>
+        <div style="height:10px"></div>
+        <div class="list" id="list"></div>
+      </section>
+    </div>
+  </div>
+
+<script>
+  // ===== Program data (minutes) =====
+  const program = [
+    { title: "Opening Prayer & Opening Remarks", minutes: 10 },
+    { title: "Praise & Worship – Youth Choir", minutes: 15 },
+    { title: "First Hymn – All Hail the Power of Jesus (Youth Choir)", minutes: 10 },
+    { title: "Children’s Cultural Fashion Parade – Children Dept", minutes: 15 },
+    { title: "First Ministration – Joy to the World (Youth Choir)", minutes: 15 },
+    { title: "Teenagers Choreography – By the Teens", minutes: 15 },
+    { title: "Kids Drama & Ministration – Children Dept", minutes: 15 },
+    { title: "Bible Reading – Anchor Verse of the Program", minutes: 10 },
+    { title: "Second Ministration – Jesus Is Oh (Youth Choir)", minutes: 15 },
+    { title: "Invited Guest Ministration – Dr. Paul Anglican Church (Singing/Charge)", minutes: 10 },
+    { title: "Drama / High Praise – Youth", minutes: 15 },
+    { title: "Teenagers Ministration", minutes: 15 },
+    { title: "Recharge Card Game / Audience Engagement", minutes: 10 },
+    { title: "Second Hymn – I Fall on Your Knees (Youth Choir)", minutes: 10 },
+    { title: "Guest Speaker – Pastor O. Dibia", minutes: 30 },
+    { title: "Third Ministration – Oh Glory Hallelujah (Youth Choir)", minutes: 15 },
+    { title: "Closing Remark & Benediction – Zonal Pastor", minutes: 10 },
+    { title: "Refreshment & Transition", minutes: 5 },
+  ];
+
+  // ===== State =====
+  let idx = 0;
+  let running = false;
+  let remainingSec = program[0].minutes * 60;
+  let timerId = null;
+  let startBaseDate = null; // date object for the chosen start time today
+
+  // ===== Helpers =====
+  const pad = (n) => String(n).padStart(2, "0");
+  const fmtClock = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const fmtHM = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const fmtMMSS = (sec) => {
+    sec = Math.max(0, sec|0);
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${pad(m)}:${pad(s)}`;
+  };
+
+  function buildSchedule(baseDate) {
+    // returns array with start/end Date for each program entry
+    const slots = [];
+    let t = new Date(baseDate);
+    for (const item of program) {
+      const start = new Date(t);
+      t = new Date(t.getTime() + item.minutes * 60 * 1000);
+      const end = new Date(t);
+      slots.push({ start, end });
+    }
+    return slots;
+  }
+
+  function computeBaseDateFromTimeInput() {
+    const timeStr = document.getElementById("startTime").value || "14:00";
+    const [hh, mm] = timeStr.split(":").map(Number);
+    const now = new Date();
+    const base = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0, 0);
+    return base;
+  }
+
+  function setStatus(text) {
+    document.getElementById("status").textContent = text;
+  }
+
+  function updateUI() {
+    const base = startBaseDate || computeBaseDateFromTimeInput();
+    const slots = buildSchedule(base);
+
+    const nowItem = program[idx];
+    const nowSlot = slots[idx];
+
+    const nextItem = program[idx + 1] || null;
+    const nextSlot = slots[idx + 1] || null;
+
+    document.getElementById("nowTitle").textContent = `${idx + 1}. ${nowItem.title}`;
+    document.getElementById("countdown").textContent = fmtMMSS(remainingSec);
+    document.getElementById("nowDuration").textContent = `Duration: ${nowItem.minutes} min`;
+    document.getElementById("nowWindow").textContent = `Time: ${fmtHM(nowSlot.start)} – ${fmtHM(nowSlot.end)}`;
+
+    document.getElementById("nextTitle").textContent = nextItem ? `${idx + 2}. ${nextItem.title}` : "— End of program —";
+    document.getElementById("nextDuration").textContent = nextItem ? `Duration: ${nextItem.minutes} min` : "—";
+    document.getElementById("nextWindow").textContent = nextItem ? `Time: ${fmtHM(nextSlot.start)} – ${fmtHM(nextSlot.end)}` : "—";
+
+    // Total
+    const totalMin = program.reduce((a, b) => a + b.minutes, 0);
+    document.getElementById("totalInfo").textContent = `Total: ${totalMin} mins (${Math.floor(totalMin/60)}h ${totalMin%60}m)`;
+
+    // List render
+    const list = document.getElementById("list");
+    list.innerHTML = "";
+    program.forEach((it, i) => {
+      const slot = slots[i];
+      const div = document.createElement("div");
+      div.className = "item" + (i === idx ? " active" : "");
+      div.innerHTML = `
+        <div class="idx">${i + 1}</div>
+        <div style="flex:1">
+          <h3>${it.title}</h3>
+          <p>${fmtHM(slot.start)} – ${fmtHM(slot.end)} • ${it.minutes} min</p>
+        </div>
+      `;
+      div.addEventListener("click", () => jumpTo(i));
+      list.appendChild(div);
+    });
+  }
+
+  function tick() {
+    remainingSec -= 1;
+    if (remainingSec <= 0) {
+      remainingSec = 0;
+      updateUI();
+
+      // Auto-advance
+      if (idx < program.length - 1) {
+        idx += 1;
+        remainingSec = program[idx].minutes * 60;
+        updateUI();
+      } else {
+        stopTimer();
+        setStatus("Completed ✅");
+        return;
+      }
+    }
+    updateUI();
+  }
+
+  function startTimer() {
+    if (running) return;
+    running = true;
+    startBaseDate = computeBaseDateFromTimeInput(); // lock schedule for this run
+    timerId = setInterval(tick, 1000);
+    setStatus("Running");
+    document.getElementById("btnStart").disabled = true;
+    document.getElementById("btnPause").disabled = false;
+    document.getElementById("startTime").disabled = true;
+    updateUI();
+  }
+
+  function stopTimer() {
+    running = false;
+    if (timerId) clearInterval(timerId);
+    timerId = null;
+    document.getElementById("btnStart").disabled = false;
+    document.getElementById("btnPause").disabled = true;
+    document.getElementById("startTime").disabled = false;
+    setStatus("Stopped");
+    updateUI();
+  }
+
+  function pauseTimer() {
+    if (!running) return;
+    running = false;
+    if (timerId) clearInterval(timerId);
+    timerId = null;
+    document.getElementById("btnStart").disabled = false;
+    document.getElementById("btnPause").disabled = true;
+    setStatus("Paused");
+    updateUI();
+  }
+
+  function resetAll() {
+    pauseTimer();
+    idx = 0;
+    remainingSec = program[0].minutes * 60;
+    startBaseDate = null;
+    setStatus("Stopped");
+    updateUI();
+  }
+
+  function nextItem() {
+    if (idx < program.length - 1) {
+      idx += 1;
+      remainingSec = program[idx].minutes * 60;
+      updateUI();
+    }
+  }
+
+  function prevItem() {
+    if (idx > 0) {
+      idx -= 1;
+      remainingSec = program[idx].minutes * 60;
+      updateUI();
+    }
+  }
+
+  function jumpTo(i) {
+    idx = Math.max(0, Math.min(program.length - 1, i));
+    remainingSec = program[idx].minutes * 60;
+    updateUI();
+  }
+
+  // live clock
+  setInterval(() => {
+    document.getElementById("clock").textContent = fmtClock(new Date());
+  }, 250);
+
+  // wire buttons
+  document.getElementById("btnStart").addEventListener("click", startTimer);
+  document.getElementById("btnPause").addEventListener("click", pauseTimer);
+  document.getElementById("btnReset").addEventListener("click", resetAll);
+  document.getElementById("btnNext").addEventListener("click", nextItem);
+  document.getElementById("btnPrev").addEventListener("click", prevItem);
+
+  // initial UI
+  updateUI();
+</script>
+</body>
+</html>
