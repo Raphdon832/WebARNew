@@ -13,6 +13,52 @@ import { authRequired } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
+const getPublicOrigin = (req) => {
+  const forwardedProtocol = req.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const forwardedHost = req.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const protocol = forwardedProtocol || req.protocol;
+  const host = forwardedHost || req.get("host");
+  return `${protocol}://${host}`;
+};
+
+const rewriteUploadUrlIfLocalhost = (value, publicOrigin) => {
+  if (typeof value !== "string") return value;
+  const match = value.match(
+    /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?(\/uploads\/.+)$/i
+  );
+  if (!match) return value;
+  return `${publicOrigin}${match[1]}`;
+};
+
+const rewriteConfigUploadUrls = (config, publicOrigin) => {
+  if (!config || typeof config !== "object") return config;
+
+  const rewrittenConfig = { ...config };
+  ["markerImageUrl", "mindFileUrl", "contentUrl"].forEach((key) => {
+    rewrittenConfig[key] = rewriteUploadUrlIfLocalhost(rewrittenConfig[key], publicOrigin);
+  });
+
+  if (rewrittenConfig.loadingScreen && typeof rewrittenConfig.loadingScreen === "object") {
+    rewrittenConfig.loadingScreen = {
+      ...rewrittenConfig.loadingScreen,
+      backgroundImageUrl: rewriteUploadUrlIfLocalhost(
+        rewrittenConfig.loadingScreen.backgroundImageUrl,
+        publicOrigin
+      )
+    };
+  }
+
+  return rewrittenConfig;
+};
+
+const normalizeProjectForClient = (project, req) => {
+  if (!project) return project;
+  return {
+    ...project,
+    config: rewriteConfigUploadUrls(project.config, getPublicOrigin(req))
+  };
+};
+
 const generateSlug = async (name) => {
   const slugBase = slugify(name, { lower: true, strict: true }) || "project";
   let slug = `${slugBase}-${Date.now()}`;
@@ -40,7 +86,7 @@ router.post("/", authRequired, async (req, res) => {
       config
     });
 
-    res.json(project);
+    res.json(normalizeProjectForClient(project, req));
   } catch (err) {
     console.error("Create project error", err);
     res.status(500).json({ message: "Server error" });
@@ -50,7 +96,7 @@ router.post("/", authRequired, async (req, res) => {
 router.get("/", authRequired, async (req, res) => {
   try {
     const projects = await listProjectsByOwner(req.userId);
-    res.json(projects);
+    res.json(projects.map((project) => normalizeProjectForClient(project, req)));
   } catch (err) {
     console.error("List projects error", err);
     res.status(500).json({ message: "Server error" });
@@ -66,7 +112,7 @@ router.get("/slug/:slug", async (req, res) => {
 
     await incrementProjectView(project.id);
     const updatedProject = await findProjectBySlug(req.params.slug);
-    res.json(updatedProject || project);
+    res.json(normalizeProjectForClient(updatedProject || project, req));
   } catch (err) {
     console.error("Fetch project error", err);
     res.status(500).json({ message: "Server error" });
@@ -79,7 +125,7 @@ router.get("/:id", authRequired, async (req, res) => {
     if (!project || project.owner !== req.userId) {
       return res.status(404).json({ message: "Project not found" });
     }
-    res.json(project);
+    res.json(normalizeProjectForClient(project, req));
   } catch (err) {
     console.error("Fetch project by id error", err);
     res.status(500).json({ message: "Server error" });
@@ -103,7 +149,7 @@ router.put("/:id", authRequired, async (req, res) => {
       config
     });
 
-    res.json(updated);
+    res.json(normalizeProjectForClient(updated, req));
   } catch (err) {
     console.error("Update project error", err);
     res.status(500).json({ message: "Server error" });
