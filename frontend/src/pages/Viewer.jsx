@@ -101,7 +101,16 @@ const Viewer = () => {
   }
 
   return (
-    <div style={{ width: "100vw", height: "100vh", background: "#000" }}>
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        width: "100vw",
+        height: "100vh",
+        overflow: "hidden",
+        background: "transparent"
+      }}
+    >
       {videoNeedsInteraction && (
         <button
           type="button"
@@ -140,6 +149,7 @@ const Viewer = () => {
         </p>
       )}
       <a-scene
+        embedded
         mindar-image={`imageTargetSrc: ${mindFileUrl}; autoStart: true;`}
         vr-mode-ui="enabled: false"
         device-orientation-permission-ui="enabled: true"
