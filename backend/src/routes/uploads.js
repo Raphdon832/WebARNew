@@ -4,12 +4,9 @@ import fs from "fs";
 import multer from "multer";
 import path from "path";
 import { authRequired } from "../middleware/authMiddleware.js";
+import { contentUploadsDir, markerUploadsDir, uploadsRootDir } from "../lib/uploads.js";
 
 const router = express.Router();
-
-const uploadsRootDir = path.resolve(process.cwd(), "uploads");
-const markerDir = path.join(uploadsRootDir, "markers");
-const contentDir = path.join(uploadsRootDir, "content");
 
 const ensureDir = (dirPath) => {
   if (!fs.existsSync(dirPath)) {
@@ -20,7 +17,7 @@ const ensureDir = (dirPath) => {
 const getFileExtension = (originalName = "") => path.extname(originalName).toLowerCase();
 
 const createUploader = ({ subDir, allowedExtensions, allowedMimePrefixes }) => {
-  const uploadDir = subDir === "markers" ? markerDir : contentDir;
+  const uploadDir = subDir === "markers" ? markerUploadsDir : contentUploadsDir;
 
   const storage = multer.diskStorage({
     destination: (_req, _file, cb) => {

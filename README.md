@@ -81,6 +81,22 @@ Set this environment variable in Netlify site settings:
 | --- | --- |
 | `VITE_API_URL` | public backend API base URL (for example `https://your-api.example.com/api`) |
 
+## Railway Deploy (Backend)
+
+Deploy the `backend/` directory to Railway as a Node service.
+
+Required backend environment variables:
+
+| key | description |
+| --- | --- |
+| `JWT_SECRET` | secret used to sign auth tokens |
+| `FIREBASE_PROJECT_ID` | Firebase project ID |
+| `FIREBASE_CLIENT_EMAIL` | service account client email |
+| `FIREBASE_PRIVATE_KEY` | service account private key (`\n` escaped) |
+| `UPLOADS_DIR` | persistent upload path (for example `/uploads`) |
+
+For file uploads, attach a Railway volume and mount it at the same `UPLOADS_DIR` path.
+
 ### 3. Flow
 1. Register → Login.
 2. Visit Dashboard → "New Project".
