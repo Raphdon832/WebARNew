@@ -4,6 +4,7 @@ import { fetchProjectBySlug } from "../api/projects";
 import { useMindAR } from "../lib/useMindAR";
 import { normalizeVideoOptions } from "../lib/videoOptions";
 import { normalizeLoadingScreenOptions } from "../lib/loadingScreenOptions";
+import { compileMindFileFromImageUrl } from "../lib/mindFileCompiler";
 
 const parseNumber = (value, fallback) => {
   const parsed = Number.parseFloat(value);
@@ -62,6 +63,11 @@ const Viewer = () => {
   const [error, setError] = useState(null);
   const [loadingProgress, setLoadingProgress] = useState(10);
   const [sceneStarted, setSceneStarted] = useState(false);
+  const [mindTargetSrc, setMindTargetSrc] = useState(null);
+  const [mindTargetPreparing, setMindTargetPreparing] = useState(false);
+  const [mindTargetCompileProgress, setMindTargetCompileProgress] = useState(0);
+  const [mindTargetError, setMindTargetError] = useState(null);
+  const [mindTargetFallbackActive, setMindTargetFallbackActive] = useState(false);
   const [videoError, setVideoError] = useState(null);
   const [videoNeedsInteraction, setVideoNeedsInteraction] = useState(false);
   const [videoPlaneSize, setVideoPlaneSize] = useState({ width: 1, height: 0.5625 });
@@ -84,12 +90,25 @@ const Viewer = () => {
 
   useEffect(() => {
     setSceneStarted(false);
+    setMindTargetSrc(null);
+    setMindTargetPreparing(false);
+    setMindTargetCompileProgress(0);
+    setMindTargetError(null);
+    setMindTargetFallbackActive(false);
     mindArStartedRef.current = false;
     manualVideoStartRef.current = false;
   }, [slug]);
 
   useEffect(() => {
-    const targetProgress = project ? (ready ? 100 : 68) : 34;
+    const targetProgress = !project
+      ? 34
+      : !ready
+        ? 68
+        : mindTargetPreparing
+          ? 84
+          : mindTargetSrc
+            ? 100
+            : 92;
     const timer = window.setInterval(() => {
       setLoadingProgress((prev) => {
         if (prev >= targetProgress) return prev;
@@ -99,7 +118,7 @@ const Viewer = () => {
     }, 70);
 
     return () => window.clearInterval(timer);
-  }, [project, ready]);
+  }, [project, ready, mindTargetPreparing, mindTargetSrc]);
 
   const normalizeAssetUrl = (url) => {
     if (!url) return url;
@@ -130,9 +149,86 @@ const Viewer = () => {
   const transformScale = toVectorString(resolvedTransform.scale);
   const mindFileUrl =
     normalizeAssetUrl(explicitMindFileUrl || markerImageUrl?.replace(/\.(png|jpg|jpeg)$/i, ".mind"));
+  const resolvedMarkerImageUrl = normalizeAssetUrl(markerImageUrl);
   const resolvedContentUrl = normalizeAssetUrl(contentUrl);
   const resolvedLoadingBackgroundUrl = normalizeAssetUrl(loadingScreen.backgroundImageUrl);
-  const hasBootData = Boolean(project && ready && mindFileUrl);
+  const hasBootData = Boolean(project && ready && mindTargetSrc);
+
+  useEffect(() => {
+    let active = true;
+    let compiledMindObjectUrl = null;
+
+    if (!project || !ready) return;
+
+    const verifyMindFileUrl = async (url) => {
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) return false;
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("text/html")) return false;
+        return true;
+      } catch (_err) {
+        return false;
+      }
+    };
+
+    const resolveMindTarget = async () => {
+      setMindTargetPreparing(true);
+      setMindTargetCompileProgress(0);
+      setMindTargetError(null);
+      setMindTargetFallbackActive(false);
+      setMindTargetSrc(null);
+
+      const candidateUrls = [];
+      if (mindFileUrl) candidateUrls.push(mindFileUrl);
+      const derivedFromMarker = resolvedMarkerImageUrl?.replace(/\.(png|jpg|jpeg)$/i, ".mind");
+      if (derivedFromMarker && !candidateUrls.includes(derivedFromMarker)) {
+        candidateUrls.push(derivedFromMarker);
+      }
+
+      for (const candidateUrl of candidateUrls) {
+        const isUsable = await verifyMindFileUrl(candidateUrl);
+        if (!active) return;
+        if (isUsable) {
+          setMindTargetSrc(candidateUrl);
+          setMindTargetPreparing(false);
+          return;
+        }
+      }
+
+      if (resolvedMarkerImageUrl) {
+        try {
+          const compiledBlob = await compileMindFileFromImageUrl(
+            resolvedMarkerImageUrl,
+            (progress) => {
+              if (active) setMindTargetCompileProgress(progress);
+            }
+          );
+          if (!active) return;
+          compiledMindObjectUrl = URL.createObjectURL(compiledBlob);
+          setMindTargetSrc(compiledMindObjectUrl);
+          setMindTargetFallbackActive(true);
+          setMindTargetPreparing(false);
+          return;
+        } catch (_err) {
+          if (!active) return;
+        }
+      }
+
+      if (!active) return;
+      setMindTargetError(
+        "Marker target file (.mind) is unavailable. Re-open this project in the editor and regenerate .mind."
+      );
+      setMindTargetPreparing(false);
+    };
+
+    resolveMindTarget();
+
+    return () => {
+      active = false;
+      if (compiledMindObjectUrl) URL.revokeObjectURL(compiledMindObjectUrl);
+    };
+  }, [project, ready, mindFileUrl, resolvedMarkerImageUrl]);
 
   const applyVideoStartTime = (videoEl) => {
     if (!videoEl) return;
@@ -248,6 +344,34 @@ const Viewer = () => {
   }, [contentType, videoOptions]);
 
   useEffect(() => {
+    if (!project || !ready || contentType !== "video" || !resolvedContentUrl) return;
+
+    let active = true;
+    setVideoError(null);
+
+    const verifyVideoAsset = async () => {
+      try {
+        const response = await fetch(resolvedContentUrl, { method: "HEAD", cache: "no-store" });
+        if (!active) return;
+        if (!response.ok) {
+          setVideoError(
+            "Video file could not be loaded (404/invalid URL). Re-upload the video in the editor."
+          );
+          return;
+        }
+      } catch (_err) {
+        if (!active) return;
+      }
+    };
+
+    verifyVideoAsset();
+
+    return () => {
+      active = false;
+    };
+  }, [project, ready, contentType, resolvedContentUrl]);
+
+  useEffect(() => {
     if (!hasBootData) return;
     if (loadingScreen.showStartButton) return;
     setSceneStarted(true);
@@ -281,19 +405,20 @@ const Viewer = () => {
   if (error) return <p style={{ padding: 24 }}>{error}</p>;
   if (mindArError)
     return <p style={{ padding: 24 }}>Failed to load AR engine. Check console for details.</p>;
-  if (project && ready && !mindFileUrl) {
-    return <p style={{ padding: 24 }}>Marker target (.mind) file is missing for this project.</p>;
-  }
 
   const videoScale = `${videoOptions.flipHorizontal ? -1 : 1} ${videoOptions.flipVertical ? -1 : 1} 1`;
-  const showLoadingOverlay = !sceneStarted || !project || !ready;
-  const canClickStart = Boolean(project && ready && mindFileUrl && loadingScreen.showStartButton);
+  const showLoadingOverlay = !sceneStarted || !project || !ready || !mindTargetSrc;
+  const canClickStart = Boolean(project && ready && mindTargetSrc && loadingScreen.showStartButton);
   const loadingLabel =
     !project
       ? "Fetching experience..."
       : !ready
         ? "Initializing AR engine..."
-        : "Ready to start";
+        : mindTargetPreparing
+          ? "Preparing marker target..."
+          : mindTargetError
+            ? "Marker target unavailable"
+            : "Ready to start";
 
   return (
     <div
@@ -348,6 +473,31 @@ const Viewer = () => {
             <p style={{ margin: "8px 0 0", fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
               {Math.round(loadingProgress)}%
             </p>
+            {mindTargetPreparing && mindTargetCompileProgress > 0 && (
+              <p style={{ margin: "8px 0 0", fontSize: 12, color: "rgba(255,255,255,0.68)" }}>
+                Rebuilding .mind from marker image: {Math.round(mindTargetCompileProgress)}%
+              </p>
+            )}
+            {mindTargetFallbackActive && !mindTargetPreparing && (
+              <p style={{ margin: "8px 0 0", fontSize: 12, color: "rgba(133,255,205,0.86)" }}>
+                Marker target regenerated automatically.
+              </p>
+            )}
+            {mindTargetError && (
+              <p
+                style={{
+                  margin: "10px 0 0",
+                  fontSize: 12,
+                  color: "#ffd5d5",
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  background: "rgba(145,0,22,0.45)",
+                  border: "1px solid rgba(255,180,180,0.45)"
+                }}
+              >
+                {mindTargetError}
+              </p>
+            )}
             {canClickStart && (
               <button
                 type="button"
@@ -412,11 +562,11 @@ const Viewer = () => {
           {videoError}
         </p>
       )}
-      {project && ready && mindFileUrl && (
+      {project && ready && mindTargetSrc && (
         <a-scene
           ref={sceneRef}
           embedded
-          mindar-image={`imageTargetSrc: ${mindFileUrl}; autoStart: false;`}
+          mindar-image={`imageTargetSrc: ${mindTargetSrc}; autoStart: false;`}
           vr-mode-ui="enabled: false"
           device-orientation-permission-ui="enabled: true"
           renderer="alpha: true; colorManagement: true; physicallyCorrectLights: true"
