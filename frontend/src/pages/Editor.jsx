@@ -9,6 +9,17 @@ import {
   uploadVideo
 } from "../api/uploads";
 
+const defaultTransform = {
+  position: { x: "0", y: "0", z: "0" },
+  rotation: { x: "0", y: "0", z: "0" },
+  scale: { x: "0.2", y: "0.2", z: "0.2" }
+};
+
+const parseNumber = (value, fallback) => {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 const Editor = () => {
   const [name, setName] = useState("");
   const [contentType, setContentType] = useState("model");
@@ -16,12 +27,49 @@ const Editor = () => {
   const [mindFileUrl, setMindFileUrl] = useState("");
   const [contentUrl, setContentUrl] = useState("");
   const [labelText, setLabelText] = useState("");
+  const [transform, setTransform] = useState(defaultTransform);
   const [slug, setSlug] = useState(null);
   const [saving, setSaving] = useState(false);
   const [markerUploading, setMarkerUploading] = useState(false);
   const [mindUploading, setMindUploading] = useState(false);
   const [contentUploading, setContentUploading] = useState(false);
   const [error, setError] = useState(null);
+
+  const handleTransformChange = (group, axis, value) => {
+    setTransform((prev) => ({
+      ...prev,
+      [group]: {
+        ...prev[group],
+        [axis]: value
+      }
+    }));
+  };
+
+  const handleContentTypeChange = (nextType) => {
+    setContentType(nextType);
+    setTransform((prev) => {
+      const isDefaultModelScale =
+        prev.scale.x === "0.2" && prev.scale.y === "0.2" && prev.scale.z === "0.2";
+      const isDefaultVideoScale =
+        prev.scale.x === "1" && prev.scale.y === "1" && prev.scale.z === "1";
+
+      if (nextType === "video" && isDefaultModelScale) {
+        return {
+          ...prev,
+          scale: { x: "1", y: "1", z: "1" }
+        };
+      }
+
+      if (nextType === "model" && isDefaultVideoScale) {
+        return {
+          ...prev,
+          scale: { x: "0.2", y: "0.2", z: "0.2" }
+        };
+      }
+
+      return prev;
+    });
+  };
 
   const uploadAsset = async (uploadFn, file, setUploading, onSuccess) => {
     if (!file) return;
@@ -61,6 +109,33 @@ const Editor = () => {
       return;
     }
 
+    const normalizedTransform = {
+      position: {
+        x: parseNumber(transform.position.x, 0),
+        y: parseNumber(transform.position.y, 0),
+        z: parseNumber(transform.position.z, 0)
+      },
+      rotation: {
+        x: parseNumber(transform.rotation.x, 0),
+        y: parseNumber(transform.rotation.y, 0),
+        z: parseNumber(transform.rotation.z, 0)
+      },
+      scale: {
+        x: parseNumber(transform.scale.x, 1),
+        y: parseNumber(transform.scale.y, 1),
+        z: parseNumber(transform.scale.z, 1)
+      }
+    };
+
+    if (
+      normalizedTransform.scale.x <= 0 ||
+      normalizedTransform.scale.y <= 0 ||
+      normalizedTransform.scale.z <= 0
+    ) {
+      setError("Scale values must be greater than zero");
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
@@ -71,7 +146,8 @@ const Editor = () => {
           mindFileUrl,
           contentType,
           contentUrl,
-          labelText
+          labelText,
+          transform: normalizedTransform
         }
       });
       setSlug(project.slug);
@@ -95,7 +171,7 @@ const Editor = () => {
             name={name}
             setName={setName}
             contentType={contentType}
-            setContentType={setContentType}
+            setContentType={handleContentTypeChange}
             markerImageUrl={markerImageUrl}
             setMarkerImageUrl={setMarkerImageUrl}
             mindFileUrl={mindFileUrl}
@@ -110,6 +186,8 @@ const Editor = () => {
             markerUploading={markerUploading}
             mindUploading={mindUploading}
             contentUploading={contentUploading}
+            transform={transform}
+            onTransformChange={handleTransformChange}
             onSave={handleSave}
             saving={saving}
           />

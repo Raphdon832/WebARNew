@@ -3,12 +3,42 @@ import { useParams } from "react-router-dom";
 import { fetchProjectBySlug } from "../api/projects";
 import { useMindAR } from "../lib/useMindAR";
 
+const parseNumber = (value, fallback) => {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const toVectorString = (vector) => `${vector.x} ${vector.y} ${vector.z}`;
+
+const resolveTransform = (rawTransform = {}, contentType = "model") => {
+  const defaultScale = contentType === "video" ? 1 : 0.2;
+
+  return {
+    position: {
+      x: parseNumber(rawTransform?.position?.x, 0),
+      y: parseNumber(rawTransform?.position?.y, 0),
+      z: parseNumber(rawTransform?.position?.z, 0)
+    },
+    rotation: {
+      x: parseNumber(rawTransform?.rotation?.x, 0),
+      y: parseNumber(rawTransform?.rotation?.y, 0),
+      z: parseNumber(rawTransform?.rotation?.z, 0)
+    },
+    scale: {
+      x: parseNumber(rawTransform?.scale?.x, defaultScale),
+      y: parseNumber(rawTransform?.scale?.y, defaultScale),
+      z: parseNumber(rawTransform?.scale?.z, defaultScale)
+    }
+  };
+};
+
 const Viewer = () => {
   const { slug } = useParams();
   const [project, setProject] = useState(null);
   const [error, setError] = useState(null);
   const [videoError, setVideoError] = useState(null);
   const [videoNeedsInteraction, setVideoNeedsInteraction] = useState(false);
+  const [videoAspectSize, setVideoAspectSize] = useState({ width: 1, height: 0.5625 });
   const videoRef = useRef(null);
   const targetRef = useRef(null);
 
@@ -52,6 +82,18 @@ const Viewer = () => {
     const targetEl = targetRef.current;
     if (!videoEl || !targetEl) return;
 
+    const updateVideoAspect = () => {
+      if (!videoEl.videoWidth || !videoEl.videoHeight) return;
+      const aspect = videoEl.videoWidth / videoEl.videoHeight;
+      if (!Number.isFinite(aspect) || aspect <= 0) return;
+
+      if (aspect >= 1) {
+        setVideoAspectSize({ width: aspect, height: 1 });
+      } else {
+        setVideoAspectSize({ width: 1, height: 1 / aspect });
+      }
+    };
+
     const onCanPlay = () => playVideo();
     const onTargetFound = () => playVideo();
     const onTargetLost = () => videoEl.pause();
@@ -61,14 +103,17 @@ const Viewer = () => {
       );
     };
 
+    videoEl.addEventListener("loadedmetadata", updateVideoAspect);
     videoEl.addEventListener("canplay", onCanPlay);
     videoEl.addEventListener("error", onVideoError);
     targetEl.addEventListener("targetFound", onTargetFound);
     targetEl.addEventListener("targetLost", onTargetLost);
 
+    updateVideoAspect();
     playVideo();
 
     return () => {
+      videoEl.removeEventListener("loadedmetadata", updateVideoAspect);
       videoEl.removeEventListener("canplay", onCanPlay);
       videoEl.removeEventListener("error", onVideoError);
       targetEl.removeEventListener("targetFound", onTargetFound);
@@ -90,8 +135,18 @@ const Viewer = () => {
     return <p style={{ padding: 24 }}>Failed to load AR engine. Check console for details.</p>;
   if (!project || !ready) return <p style={{ padding: 24 }}>Loading AR experience...</p>;
 
-  const { markerImageUrl, mindFileUrl: explicitMindFileUrl, contentType, contentUrl, labelText } =
-    project.config;
+  const {
+    markerImageUrl,
+    mindFileUrl: explicitMindFileUrl,
+    contentType,
+    contentUrl,
+    labelText,
+    transform: rawTransform
+  } = project.config;
+  const resolvedTransform = resolveTransform(rawTransform, contentType);
+  const transformPosition = toVectorString(resolvedTransform.position);
+  const transformRotation = toVectorString(resolvedTransform.rotation);
+  const transformScale = toVectorString(resolvedTransform.scale);
   const mindFileUrl =
     normalizeAssetUrl(explicitMindFileUrl || markerImageUrl?.replace(/\.(png|jpg|jpeg)$/i, ".mind"));
   const resolvedContentUrl = normalizeAssetUrl(contentUrl);
@@ -177,30 +232,31 @@ const Viewer = () => {
         <a-camera position="0 0 0" look-controls="enabled: true"></a-camera>
 
         <a-entity ref={targetRef} mindar-image-target="targetIndex: 0">
-          {contentType === "video" ? (
-            <a-video
-              src="#video-overlay"
-              position="0 0 0"
-              width="1"
-              height="0.5625"
-              material="shader: flat; side: double;"
-            ></a-video>
-          ) : (
-            <a-gltf-model
-              src="#model"
-              position="0 0 0"
-              scale="0.2 0.2 0.2"
-              rotation="0 0 0"
-            ></a-gltf-model>
-          )}
-          {labelText && (
-            <a-text
-              value={labelText}
-              position="0 0.2 0"
-              align="center"
-              color="#ffffff"
-            ></a-text>
-          )}
+          <a-entity
+            position={transformPosition}
+            rotation={transformRotation}
+            scale={transformScale}
+          >
+            {contentType === "video" ? (
+              <a-video
+                src="#video-overlay"
+                position="0 0 0"
+                width={String(videoAspectSize.width)}
+                height={String(videoAspectSize.height)}
+                material="shader: flat; side: double;"
+              ></a-video>
+            ) : (
+              <a-gltf-model src="#model" position="0 0 0" rotation="0 0 0"></a-gltf-model>
+            )}
+            {labelText && (
+              <a-text
+                value={labelText}
+                position="0 0.2 0"
+                align="center"
+                color="#ffffff"
+              ></a-text>
+            )}
+          </a-entity>
         </a-entity>
       </a-scene>
     </div>
