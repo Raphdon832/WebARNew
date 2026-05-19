@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import EditorCanvas from "../components/EditorCanvas";
 import ProjectForm from "../components/ProjectForm";
-import { createProject } from "../api/projects";
+import { createProject, fetchProjectById, updateProject } from "../api/projects";
 import {
   uploadMarkerImage,
   uploadMarkerTarget,
@@ -9,31 +10,95 @@ import {
   uploadVideo
 } from "../api/uploads";
 
-const defaultTransform = {
+const createDefaultTransform = (type = "model") => ({
   position: { x: "0", y: "0", z: "0" },
   rotation: { x: "0", y: "0", z: "0" },
-  scale: { x: "0.2", y: "0.2", z: "0.2" }
-};
+  scale: type === "video" ? { x: "1", y: "1", z: "1" } : { x: "0.2", y: "0.2", z: "0.2" }
+});
 
 const parseNumber = (value, fallback) => {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const toInputTransform = (rawTransform, type) => {
+  const fallback = createDefaultTransform(type);
+  return {
+    position: {
+      x: String(rawTransform?.position?.x ?? fallback.position.x),
+      y: String(rawTransform?.position?.y ?? fallback.position.y),
+      z: String(rawTransform?.position?.z ?? fallback.position.z)
+    },
+    rotation: {
+      x: String(rawTransform?.rotation?.x ?? fallback.rotation.x),
+      y: String(rawTransform?.rotation?.y ?? fallback.rotation.y),
+      z: String(rawTransform?.rotation?.z ?? fallback.rotation.z)
+    },
+    scale: {
+      x: String(rawTransform?.scale?.x ?? fallback.scale.x),
+      y: String(rawTransform?.scale?.y ?? fallback.scale.y),
+      z: String(rawTransform?.scale?.z ?? fallback.scale.z)
+    }
+  };
+};
+
 const Editor = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const isEditing = id && id !== "new";
+
   const [name, setName] = useState("");
   const [contentType, setContentType] = useState("model");
   const [markerImageUrl, setMarkerImageUrl] = useState("");
   const [mindFileUrl, setMindFileUrl] = useState("");
   const [contentUrl, setContentUrl] = useState("");
   const [labelText, setLabelText] = useState("");
-  const [transform, setTransform] = useState(defaultTransform);
-  const [slug, setSlug] = useState(null);
+  const [transform, setTransform] = useState(createDefaultTransform("model"));
+  const [projectSlug, setProjectSlug] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [loadingProject, setLoadingProject] = useState(Boolean(isEditing));
   const [markerUploading, setMarkerUploading] = useState(false);
   const [mindUploading, setMindUploading] = useState(false);
   const [contentUploading, setContentUploading] = useState(false);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+
+  const pageTitle = useMemo(() => (isEditing ? "Edit Project" : "Create Project"), [isEditing]);
+
+  useEffect(() => {
+    if (!isEditing) return;
+
+    let active = true;
+    setLoadingProject(true);
+    setError(null);
+
+    fetchProjectById(id)
+      .then((project) => {
+        if (!active) return;
+        const config = project.config || {};
+        const nextType = config.contentType || "model";
+
+        setName(project.name || "");
+        setContentType(nextType);
+        setMarkerImageUrl(config.markerImageUrl || "");
+        setMindFileUrl(config.mindFileUrl || "");
+        setContentUrl(config.contentUrl || "");
+        setLabelText(config.labelText || "");
+        setTransform(toInputTransform(config.transform, nextType));
+        setProjectSlug(project.slug || null);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError(err.response?.data?.message || "Failed to load project");
+      })
+      .finally(() => {
+        if (active) setLoadingProject(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [id, isEditing]);
 
   const handleTransformChange = (group, axis, value) => {
     setTransform((prev) => ({
@@ -75,6 +140,7 @@ const Editor = () => {
     if (!file) return;
     setUploading(true);
     setError(null);
+    setSuccess(null);
     try {
       const { url } = await uploadFn(file);
       onSuccess(url);
@@ -121,9 +187,9 @@ const Editor = () => {
         z: parseNumber(transform.rotation.z, 0)
       },
       scale: {
-        x: parseNumber(transform.scale.x, 1),
-        y: parseNumber(transform.scale.y, 1),
-        z: parseNumber(transform.scale.z, 1)
+        x: parseNumber(transform.scale.x, contentType === "video" ? 1 : 0.2),
+        y: parseNumber(transform.scale.y, contentType === "video" ? 1 : 0.2),
+        z: parseNumber(transform.scale.z, contentType === "video" ? 1 : 0.2)
       }
     };
 
@@ -138,8 +204,10 @@ const Editor = () => {
 
     setSaving(true);
     setError(null);
+    setSuccess(null);
+
     try {
-      const project = await createProject({
+      const payload = {
         name,
         config: {
           markerImageUrl,
@@ -149,8 +217,16 @@ const Editor = () => {
           labelText,
           transform: normalizedTransform
         }
-      });
-      setSlug(project.slug);
+      };
+
+      const project = isEditing ? await updateProject(id, payload) : await createProject(payload);
+
+      setProjectSlug(project.slug);
+      setSuccess(isEditing ? "Project updated successfully." : "Project published successfully.");
+
+      if (!isEditing) {
+        navigate(`/editor/${project.id}`, { replace: true });
+      }
     } catch (err) {
       setError(err.response?.data?.message || "Failed to save project");
     } finally {
@@ -158,15 +234,35 @@ const Editor = () => {
     }
   };
 
+  if (loadingProject) {
+    return (
+      <div className="editor-layout">
+        <p>Loading project...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="editor-layout">
-      <div>
-        <h1>Editor</h1>
-        <p>Upload assets, configure AR behavior, and publish instantly.</p>
+      <div className="editor-hero">
+        <div>
+          <h1>{pageTitle}</h1>
+          <p>Build interactive marker-based AR scenes with precise placement controls.</p>
+        </div>
+        <button className="ghost-btn" type="button" onClick={() => navigate("/dashboard")}>
+          Back to Dashboard
+        </button>
       </div>
       <div className="editor-grid">
-        <EditorCanvas />
-        <div>
+        <EditorCanvas
+          markerImageUrl={markerImageUrl}
+          contentType={contentType}
+          contentUrl={contentUrl}
+          labelText={labelText}
+          transform={transform}
+          name={name}
+        />
+        <div className="editor-panel">
           <ProjectForm
             name={name}
             setName={setName}
@@ -192,11 +288,12 @@ const Editor = () => {
             saving={saving}
           />
           {error && <div className="auth-error">{error}</div>}
-          {slug && (
+          {success && <div className="success-note">{success}</div>}
+          {projectSlug && (
             <div className="publish-callout">
-              <p>Published!</p>
-              <a href={`${window.location.origin}/v/${slug}`} target="_blank" rel="noreferrer">
-                {window.location.origin}/v/{slug}
+              <p>Viewer URL</p>
+              <a href={`${window.location.origin}/v/${projectSlug}`} target="_blank" rel="noreferrer">
+                {window.location.origin}/v/{projectSlug}
               </a>
             </div>
           )}

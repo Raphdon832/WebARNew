@@ -2,9 +2,12 @@ import express from "express";
 import slugify from "slugify";
 import {
   createProjectDoc,
+  deleteProjectDoc,
+  findProjectById,
   findProjectBySlug,
   incrementProjectView,
-  listProjectsByOwner
+  listProjectsByOwner,
+  updateProjectDoc
 } from "../models/Project.js";
 import { authRequired } from "../middleware/authMiddleware.js";
 
@@ -50,6 +53,58 @@ router.get("/", authRequired, async (req, res) => {
     res.json(projects);
   } catch (err) {
     console.error("List projects error", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.get("/:id", authRequired, async (req, res) => {
+  try {
+    const project = await findProjectById(req.params.id);
+    if (!project || project.owner !== req.userId) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+    res.json(project);
+  } catch (err) {
+    console.error("Fetch project by id error", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.put("/:id", authRequired, async (req, res) => {
+  try {
+    const existing = await findProjectById(req.params.id);
+    if (!existing || existing.owner !== req.userId) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    const { name, config } = req.body;
+    if (!name) {
+      return res.status(400).json({ message: "Project name is required" });
+    }
+
+    const updated = await updateProjectDoc(req.params.id, {
+      name,
+      config
+    });
+
+    res.json(updated);
+  } catch (err) {
+    console.error("Update project error", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.delete("/:id", authRequired, async (req, res) => {
+  try {
+    const existing = await findProjectById(req.params.id);
+    if (!existing || existing.owner !== req.userId) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    await deleteProjectDoc(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Delete project error", err);
     res.status(500).json({ message: "Server error" });
   }
 });

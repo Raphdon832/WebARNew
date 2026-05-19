@@ -47,6 +47,26 @@ export const findProjectBySlug = async (slug) => {
   return serialize(snapshot.docs[0]);
 };
 
+export const findProjectById = async (projectId) => {
+  const doc = await projectsCollection.doc(projectId).get();
+  if (!doc.exists) return null;
+  return serialize(doc);
+};
+
+export const updateProjectDoc = async (projectId, updates = {}) => {
+  const docRef = projectsCollection.doc(projectId);
+  await docRef.update({
+    ...updates,
+    updatedAt: FieldValue.serverTimestamp()
+  });
+  const updated = await docRef.get();
+  return serialize(updated);
+};
+
+export const deleteProjectDoc = async (projectId) => {
+  await projectsCollection.doc(projectId).delete();
+};
+
 export const incrementProjectView = async (projectId) => {
   const docRef = projectsCollection.doc(projectId);
   await docRef.update({
