@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { fetchProjectBySlug } from "../api/projects";
 import { useMindAR } from "../lib/useMindAR";
 import { normalizeVideoOptions } from "../lib/videoOptions";
+import { normalizeLoadingScreenOptions } from "../lib/loadingScreenOptions";
 
 const parseNumber = (value, fallback) => {
   const parsed = Number.parseFloat(value);
@@ -59,12 +60,16 @@ const Viewer = () => {
   const { slug } = useParams();
   const [project, setProject] = useState(null);
   const [error, setError] = useState(null);
+  const [loadingProgress, setLoadingProgress] = useState(10);
+  const [sceneStarted, setSceneStarted] = useState(false);
   const [videoError, setVideoError] = useState(null);
   const [videoNeedsInteraction, setVideoNeedsInteraction] = useState(false);
   const [videoPlaneSize, setVideoPlaneSize] = useState({ width: 1, height: 0.5625 });
+  const sceneRef = useRef(null);
   const videoRef = useRef(null);
   const targetRef = useRef(null);
   const manualVideoStartRef = useRef(false);
+  const mindArStartedRef = useRef(false);
 
   const { ready, error: mindArError } = useMindAR();
 
@@ -76,6 +81,25 @@ const Viewer = () => {
         setError("Experience not found or unavailable.");
       });
   }, [slug]);
+
+  useEffect(() => {
+    setSceneStarted(false);
+    mindArStartedRef.current = false;
+    manualVideoStartRef.current = false;
+  }, [slug]);
+
+  useEffect(() => {
+    const targetProgress = project ? (ready ? 100 : 68) : 34;
+    const timer = window.setInterval(() => {
+      setLoadingProgress((prev) => {
+        if (prev >= targetProgress) return prev;
+        const delta = Math.max(0.8, (targetProgress - prev) * 0.15);
+        return Math.min(targetProgress, prev + delta);
+      });
+    }, 70);
+
+    return () => window.clearInterval(timer);
+  }, [project, ready]);
 
   const normalizeAssetUrl = (url) => {
     if (!url) return url;
@@ -93,7 +117,12 @@ const Viewer = () => {
   const labelText = config.labelText;
   const rawTransform = config.transform;
   const rawVideoOptions = config.videoOptions;
+  const rawLoadingScreen = config.loadingScreen;
   const videoOptions = useMemo(() => normalizeVideoOptions(rawVideoOptions), [rawVideoOptions]);
+  const loadingScreen = useMemo(
+    () => normalizeLoadingScreenOptions(rawLoadingScreen),
+    [rawLoadingScreen]
+  );
 
   const resolvedTransform = resolveTransform(rawTransform, contentType);
   const transformPosition = toVectorString(resolvedTransform.position);
@@ -102,6 +131,8 @@ const Viewer = () => {
   const mindFileUrl =
     normalizeAssetUrl(explicitMindFileUrl || markerImageUrl?.replace(/\.(png|jpg|jpeg)$/i, ".mind"));
   const resolvedContentUrl = normalizeAssetUrl(contentUrl);
+  const resolvedLoadingBackgroundUrl = normalizeAssetUrl(loadingScreen.backgroundImageUrl);
+  const hasBootData = Boolean(project && ready && mindFileUrl);
 
   const applyVideoStartTime = (videoEl) => {
     if (!videoEl) return;
@@ -137,6 +168,7 @@ const Viewer = () => {
 
   useEffect(() => {
     if (!ready || !project || contentType !== "video") return;
+    if (!sceneStarted) return;
 
     const videoEl = videoRef.current;
     const targetEl = targetRef.current;
@@ -196,7 +228,7 @@ const Viewer = () => {
       targetEl.removeEventListener("targetFound", onTargetFound);
       targetEl.removeEventListener("targetLost", onTargetLost);
     };
-  }, [ready, project, contentType, videoOptions]);
+  }, [ready, project, contentType, videoOptions, sceneStarted]);
 
   useEffect(() => {
     if (contentType !== "video") return;
@@ -215,15 +247,53 @@ const Viewer = () => {
     }
   }, [contentType, videoOptions]);
 
+  useEffect(() => {
+    if (!hasBootData) return;
+    if (loadingScreen.showStartButton) return;
+    setSceneStarted(true);
+  }, [hasBootData, loadingScreen.showStartButton]);
+
+  useEffect(() => {
+    if (!hasBootData || !sceneStarted) return;
+    if (mindArStartedRef.current) return;
+
+    const sceneEl = sceneRef.current;
+    if (!sceneEl) return;
+
+    const startMindAR = () => {
+      const system = sceneEl.systems?.["mindar-image-system"];
+      if (!system || mindArStartedRef.current) return;
+      system.start();
+      mindArStartedRef.current = true;
+    };
+
+    if (sceneEl.hasLoaded) {
+      startMindAR();
+      return;
+    }
+
+    sceneEl.addEventListener("loaded", startMindAR, { once: true });
+    return () => {
+      sceneEl.removeEventListener("loaded", startMindAR);
+    };
+  }, [hasBootData, sceneStarted]);
+
   if (error) return <p style={{ padding: 24 }}>{error}</p>;
   if (mindArError)
     return <p style={{ padding: 24 }}>Failed to load AR engine. Check console for details.</p>;
-  if (!project || !ready) return <p style={{ padding: 24 }}>Loading AR experience...</p>;
-  if (!mindFileUrl) {
+  if (project && ready && !mindFileUrl) {
     return <p style={{ padding: 24 }}>Marker target (.mind) file is missing for this project.</p>;
   }
 
   const videoScale = `${videoOptions.flipHorizontal ? -1 : 1} ${videoOptions.flipVertical ? -1 : 1} 1`;
+  const showLoadingOverlay = !sceneStarted || !project || !ready;
+  const canClickStart = Boolean(project && ready && mindFileUrl && loadingScreen.showStartButton);
+  const loadingLabel =
+    !project
+      ? "Fetching experience..."
+      : !ready
+        ? "Initializing AR engine..."
+        : "Ready to start";
 
   return (
     <div
@@ -233,9 +303,75 @@ const Viewer = () => {
         width: "100vw",
         height: "100vh",
         overflow: "hidden",
-        background: "transparent"
+        background: "transparent",
+        backgroundImage: resolvedLoadingBackgroundUrl ? `url(${resolvedLoadingBackgroundUrl})` : undefined,
+        backgroundSize: "cover",
+        backgroundPosition: "center center"
       }}
     >
+      {showLoadingOverlay && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 50,
+            display: "grid",
+            placeItems: "center",
+            background:
+              "radial-gradient(120% 100% at 50% 0%, rgba(0,195,255,0.14), rgba(0,0,0,0.86) 62%, #000)"
+          }}
+        >
+          <div style={{ width: "min(460px, 92vw)", padding: 16 }}>
+            <p style={{ margin: "0 0 10px", fontSize: 14, color: "rgba(255,255,255,0.78)" }}>
+              {loadingLabel}
+            </p>
+            <div
+              style={{
+                width: "100%",
+                height: 12,
+                borderRadius: 999,
+                border: "1px solid rgba(255,255,255,0.25)",
+                background: "rgba(255,255,255,0.08)",
+                overflow: "hidden"
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: `${Math.round(loadingProgress)}%`,
+                  borderRadius: 999,
+                  background: "linear-gradient(90deg, #15b4ff, #2cf58b)",
+                  transition: "width 180ms ease"
+                }}
+              />
+            </div>
+            <p style={{ margin: "8px 0 0", fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
+              {Math.round(loadingProgress)}%
+            </p>
+            {canClickStart && (
+              <button
+                type="button"
+                onClick={() => setSceneStarted(true)}
+                style={{
+                  marginTop: 14,
+                  width: "100%",
+                  padding: "12px 16px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.3)",
+                  background: "linear-gradient(90deg, rgba(21,180,255,0.92), rgba(44,245,139,0.9))",
+                  color: "#052131",
+                  fontWeight: 700,
+                  fontSize: 15,
+                  cursor: "pointer"
+                }}
+              >
+                {loadingScreen.startButtonText || "Play"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {contentType === "video" && videoNeedsInteraction && (
         <button
           type="button"
@@ -276,65 +412,68 @@ const Viewer = () => {
           {videoError}
         </p>
       )}
-      <a-scene
-        embedded
-        mindar-image={`imageTargetSrc: ${mindFileUrl}; autoStart: true;`}
-        vr-mode-ui="enabled: false"
-        device-orientation-permission-ui="enabled: true"
-        renderer="alpha: true; colorManagement: true; physicallyCorrectLights: true"
-        style={{ background: "transparent" }}
-      >
-        <a-assets>
-          {contentType === "video" ? (
-            <video
-              id="video-overlay"
-              ref={videoRef}
-              src={resolvedContentUrl}
-              autoPlay={videoOptions.autoplay}
-              muted={videoOptions.muted}
-              loop={videoOptions.loop}
-              playsInline={videoOptions.playsInline}
-              controls={videoOptions.showControls}
-              preload="auto"
-              crossOrigin="anonymous"
-              webkit-playsinline="true"
-            ></video>
-          ) : (
-            <a-asset-item id="model" src={resolvedContentUrl}></a-asset-item>
-          )}
-        </a-assets>
-
-        <a-camera position="0 0 0" look-controls="enabled: true"></a-camera>
-
-        <a-entity ref={targetRef} mindar-image-target="targetIndex: 0">
-          <a-entity
-            position={transformPosition}
-            rotation={transformRotation}
-            scale={transformScale}
-          >
+      {project && ready && mindFileUrl && (
+        <a-scene
+          ref={sceneRef}
+          embedded
+          mindar-image={`imageTargetSrc: ${mindFileUrl}; autoStart: false;`}
+          vr-mode-ui="enabled: false"
+          device-orientation-permission-ui="enabled: true"
+          renderer="alpha: true; colorManagement: true; physicallyCorrectLights: true"
+          style={{ background: "transparent" }}
+        >
+          <a-assets>
             {contentType === "video" ? (
-              <a-video
-                src="#video-overlay"
-                position="0 0 0"
-                width={String(videoPlaneSize.width)}
-                height={String(videoPlaneSize.height)}
-                scale={videoScale}
-                material={`shader: flat; side: double; transparent: true; opacity: ${videoOptions.opacity};`}
-              ></a-video>
+              <video
+                id="video-overlay"
+                ref={videoRef}
+                src={resolvedContentUrl}
+                autoPlay={videoOptions.autoplay}
+                muted={videoOptions.muted}
+                loop={videoOptions.loop}
+                playsInline={videoOptions.playsInline}
+                controls={videoOptions.showControls}
+                preload="auto"
+                crossOrigin="anonymous"
+                webkit-playsinline="true"
+              ></video>
             ) : (
-              <a-gltf-model src="#model" position="0 0 0" rotation="0 0 0"></a-gltf-model>
+              <a-asset-item id="model" src={resolvedContentUrl}></a-asset-item>
             )}
-            {labelText && (
-              <a-text
-                value={labelText}
-                position="0 0.2 0"
-                align="center"
-                color="#ffffff"
-              ></a-text>
-            )}
+          </a-assets>
+
+          <a-camera position="0 0 0" look-controls="enabled: true"></a-camera>
+
+          <a-entity ref={targetRef} mindar-image-target="targetIndex: 0">
+            <a-entity
+              position={transformPosition}
+              rotation={transformRotation}
+              scale={transformScale}
+            >
+              {contentType === "video" ? (
+                <a-video
+                  src="#video-overlay"
+                  position="0 0 0"
+                  width={String(videoPlaneSize.width)}
+                  height={String(videoPlaneSize.height)}
+                  scale={videoScale}
+                  material={`shader: flat; side: double; transparent: true; opacity: ${videoOptions.opacity};`}
+                ></a-video>
+              ) : (
+                <a-gltf-model src="#model" position="0 0 0" rotation="0 0 0"></a-gltf-model>
+              )}
+              {labelText && (
+                <a-text
+                  value={labelText}
+                  position="0 0.2 0"
+                  align="center"
+                  color="#ffffff"
+                ></a-text>
+              )}
+            </a-entity>
           </a-entity>
-        </a-entity>
-      </a-scene>
+        </a-scene>
+      )}
     </div>
   );
 };

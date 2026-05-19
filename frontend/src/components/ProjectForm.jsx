@@ -16,16 +16,20 @@ const ProjectForm = ({
   setLabelText,
   onMarkerImageUpload,
   onMindFileUpload,
+  onLoadingBackgroundUpload,
   onContentUpload,
   markerUploading,
   mindUploading,
   mindCompiling,
   mindCompileProgress,
+  loadingBackgroundUploading,
   contentUploading,
   transform,
   onTransformChange,
   videoOptions = {},
   onVideoOptionChange,
+  loadingScreen = {},
+  onLoadingScreenChange,
   onGenerateMindFromMarker,
   onSave,
   saving
@@ -332,6 +336,62 @@ const ProjectForm = ({
         </div>
       )}
 
+      <div style={optionCardStyle}>
+        <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Loading Screen</h3>
+        <small style={{ display: "block", marginBottom: 10, color: "rgba(255,255,255,0.65)" }}>
+          Customize the pre-AR experience overlay shown before the camera session starts.
+        </small>
+
+        <AssetUploader
+          label="Loading Background Image URL"
+          placeholder="https://cdn.example.com/loading-background.jpg"
+          value={loadingScreen.backgroundImageUrl || ""}
+          onChange={(value) => onLoadingScreenChange("backgroundImageUrl", value)}
+        />
+
+        <label style={{ display: "block", marginBottom: 12 }}>
+          <span style={{ display: "block", marginBottom: 6, color: "rgba(255,255,255,0.7)" }}>
+            Upload Loading Background Image
+          </span>
+          <input
+            type="file"
+            accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+            onChange={(e) => onLoadingBackgroundUpload(e.target.files?.[0])}
+          />
+          {loadingBackgroundUploading && (
+            <small style={{ display: "block", marginTop: 6 }}>
+              Uploading loading background image...
+            </small>
+          )}
+        </label>
+
+        <label
+          style={{
+            fontSize: 13,
+            color: "rgba(255,255,255,0.85)",
+            display: "flex",
+            gap: 8,
+            alignItems: "center"
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={Boolean(loadingScreen.showStartButton)}
+            onChange={(e) => onLoadingScreenChange("showStartButton", e.target.checked)}
+          />
+          Show custom start button before AR starts
+        </label>
+
+        {loadingScreen.showStartButton && (
+          <AssetUploader
+            label="Start Button Text"
+            placeholder="Play"
+            value={loadingScreen.startButtonText || "Play"}
+            onChange={(value) => onLoadingScreenChange("startButtonText", value)}
+          />
+        )}
+      </div>
+
       <AssetUploader
         label="Label Text"
         placeholder="Tap to explore"
@@ -353,7 +413,14 @@ const ProjectForm = ({
           marginTop: 8
         }}
         onClick={onSave}
-        disabled={saving || markerUploading || mindUploading || mindCompiling || contentUploading}
+        disabled={
+          saving ||
+          markerUploading ||
+          mindUploading ||
+          mindCompiling ||
+          loadingBackgroundUploading ||
+          contentUploading
+        }
       >
         {saving ? "Publishing..." : "Save & Publish"}
       </button>

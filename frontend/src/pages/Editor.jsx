@@ -15,6 +15,11 @@ import {
   toInputVideoOptions
 } from "../lib/videoOptions";
 import {
+  createDefaultLoadingScreenOptions,
+  normalizeLoadingScreenOptions,
+  toInputLoadingScreenOptions
+} from "../lib/loadingScreenOptions";
+import {
   compileMindFileFromImageFile,
   compileMindFileFromImageUrl
 } from "../lib/mindFileCompiler";
@@ -64,6 +69,7 @@ const Editor = () => {
   const [labelText, setLabelText] = useState("");
   const [transform, setTransform] = useState(createDefaultTransform("model"));
   const [videoOptions, setVideoOptions] = useState(createDefaultVideoOptions());
+  const [loadingScreen, setLoadingScreen] = useState(createDefaultLoadingScreenOptions());
   const [projectSlug, setProjectSlug] = useState(null);
   const [saving, setSaving] = useState(false);
   const [loadingProject, setLoadingProject] = useState(Boolean(isEditing));
@@ -71,6 +77,7 @@ const Editor = () => {
   const [mindUploading, setMindUploading] = useState(false);
   const [mindCompiling, setMindCompiling] = useState(false);
   const [mindCompileProgress, setMindCompileProgress] = useState(0);
+  const [loadingBackgroundUploading, setLoadingBackgroundUploading] = useState(false);
   const [contentUploading, setContentUploading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -98,6 +105,7 @@ const Editor = () => {
         setLabelText(config.labelText || "");
         setTransform(toInputTransform(config.transform, nextType));
         setVideoOptions(toInputVideoOptions(config.videoOptions));
+        setLoadingScreen(toInputLoadingScreenOptions(config.loadingScreen));
         setProjectSlug(project.slug || null);
       })
       .catch((err) => {
@@ -151,6 +159,13 @@ const Editor = () => {
 
   const handleVideoOptionChange = (key, value) => {
     setVideoOptions((prev) => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const handleLoadingScreenChange = (key, value) => {
+    setLoadingScreen((prev) => ({
       ...prev,
       [key]: value
     }));
@@ -242,6 +257,14 @@ const Editor = () => {
   const handleMindFileUpload = (file) =>
     uploadAsset(uploadMarkerTarget, file, setMindUploading, setMindFileUrl);
 
+  const handleLoadingBackgroundUpload = (file) =>
+    uploadAsset(uploadMarkerImage, file, setLoadingBackgroundUploading, (url) =>
+      setLoadingScreen((prev) => ({
+        ...prev,
+        backgroundImageUrl: url
+      }))
+    );
+
   const handleContentUpload = (file) =>
     uploadAsset(
       contentType === "video" ? uploadVideo : uploadModel,
@@ -288,6 +311,7 @@ const Editor = () => {
     }
 
     const normalizedVideoOptions = normalizeVideoOptions(videoOptions);
+    const normalizedLoadingScreen = normalizeLoadingScreenOptions(loadingScreen);
 
     setSaving(true);
     setError(null);
@@ -303,7 +327,8 @@ const Editor = () => {
           contentUrl,
           labelText,
           transform: normalizedTransform,
-          videoOptions: normalizedVideoOptions
+          videoOptions: normalizedVideoOptions,
+          loadingScreen: normalizedLoadingScreen
         }
       };
 
@@ -368,16 +393,20 @@ const Editor = () => {
             setLabelText={setLabelText}
             onMarkerImageUpload={handleMarkerImageUpload}
             onMindFileUpload={handleMindFileUpload}
+            onLoadingBackgroundUpload={handleLoadingBackgroundUpload}
             onContentUpload={handleContentUpload}
             markerUploading={markerUploading}
             mindUploading={mindUploading}
             mindCompiling={mindCompiling}
             mindCompileProgress={mindCompileProgress}
+            loadingBackgroundUploading={loadingBackgroundUploading}
             contentUploading={contentUploading}
             transform={transform}
             onTransformChange={handleTransformChange}
             videoOptions={videoOptions}
             onVideoOptionChange={handleVideoOptionChange}
+            loadingScreen={loadingScreen}
+            onLoadingScreenChange={handleLoadingScreenChange}
             onGenerateMindFromMarker={() => handleGenerateMindFromMarker()}
             onSave={handleSave}
             saving={saving}
