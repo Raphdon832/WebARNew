@@ -22,6 +22,8 @@ const ProjectForm = ({
   mindUploading,
   mindCompiling,
   mindCompileProgress,
+  markerQualityChecking,
+  markerQuality,
   loadingBackgroundUploading,
   contentUploading,
   transform,
@@ -135,6 +137,15 @@ const ProjectForm = ({
     </label>
   );
 
+  const markerQualityColor =
+    markerQuality?.score === null || markerQuality?.score === undefined
+      ? "#9fb4d8"
+      : markerQuality.score >= 68
+        ? "#6ff0a8"
+        : markerQuality.score >= 52
+          ? "#ffd166"
+          : "#ff8c8c";
+
   return (
     <div style={{ width: "100%", maxWidth: 480 }}>
       <AssetUploader
@@ -161,7 +172,46 @@ const ProjectForm = ({
         {markerUploading && (
           <small style={{ display: "block", marginTop: 6 }}>Uploading marker image...</small>
         )}
+        {markerQualityChecking && (
+          <small style={{ display: "block", marginTop: 6, color: "rgba(255,255,255,0.72)" }}>
+            Checking marker tracking quality...
+          </small>
+        )}
       </label>
+
+      {markerQuality && (
+        <div
+          style={{
+            margin: "-6px 0 16px",
+            padding: 12,
+            borderRadius: 10,
+            border: `1px solid ${markerQualityColor}`,
+            background: "rgba(5,12,28,0.68)"
+          }}
+        >
+          <strong style={{ display: "block", color: markerQualityColor, marginBottom: 6 }}>
+            Marker Quality: {markerQuality.rating}
+            {Number.isFinite(markerQuality.score) ? ` (${markerQuality.score}/100)` : ""}
+          </strong>
+          {markerQuality.dimensions && (
+            <small style={{ display: "block", color: "rgba(255,255,255,0.65)", marginBottom: 6 }}>
+              {markerQuality.dimensions.width} x {markerQuality.dimensions.height}px
+            </small>
+          )}
+          <small style={{ display: "block", color: "rgba(255,255,255,0.72)" }}>
+            {markerQuality.summary}
+          </small>
+          {markerQuality.issues?.length > 0 && (
+            <div style={{ display: "grid", gap: 4, marginTop: 8 }}>
+              {markerQuality.issues.map((issue) => (
+                <small key={issue} style={{ color: "rgba(255,255,255,0.68)" }}>
+                  - {issue}
+                </small>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <AssetUploader
         label="Marker Target URL (.mind)"
@@ -381,7 +431,7 @@ const ProjectForm = ({
             min: "0",
             max: "1000",
             step: "1",
-            hint: "8 is stable; 20+ responds faster."
+            hint: "4 is steadier; 12+ responds faster."
           })}
           {renderTrackingInput({
             key: "missTolerance",
@@ -400,6 +450,24 @@ const ProjectForm = ({
             max: "30",
             step: "1",
             hint: "Higher waits for a steadier lock before showing content."
+          })}
+        </div>
+        <div style={vectorGridStyle}>
+          {renderTrackingInput({
+            key: "cameraWidth",
+            label: "Camera Width",
+            min: "640",
+            max: "1920",
+            step: "1",
+            hint: "1280 recommended."
+          })}
+          {renderTrackingInput({
+            key: "cameraHeight",
+            label: "Camera Height",
+            min: "360",
+            max: "1080",
+            step: "1",
+            hint: "720 recommended."
           })}
         </div>
       </div>

@@ -29,6 +29,10 @@ import {
   compileMindFileFromImageFile,
   compileMindFileFromImageUrl
 } from "../lib/mindFileCompiler";
+import {
+  evaluateMarkerQualityFromImageFile,
+  evaluateMarkerQualityFromImageUrl
+} from "../lib/markerQuality";
 
 const createDefaultTransform = (type = "model") => ({
   position: { x: "0", y: "0", z: "0" },
@@ -84,6 +88,8 @@ const Editor = () => {
   const [mindUploading, setMindUploading] = useState(false);
   const [mindCompiling, setMindCompiling] = useState(false);
   const [mindCompileProgress, setMindCompileProgress] = useState(0);
+  const [markerQualityChecking, setMarkerQualityChecking] = useState(false);
+  const [markerQuality, setMarkerQuality] = useState(null);
   const [loadingBackgroundUploading, setLoadingBackgroundUploading] = useState(false);
   const [contentUploading, setContentUploading] = useState(false);
   const [error, setError] = useState(null);
@@ -114,6 +120,7 @@ const Editor = () => {
         setVideoOptions(toInputVideoOptions(config.videoOptions));
         setLoadingScreen(toInputLoadingScreenOptions(config.loadingScreen));
         setTrackingOptions(toInputTrackingOptions(config.trackingOptions));
+        setMarkerQuality(null);
         setProjectSlug(project.slug || null);
       })
       .catch((err) => {
@@ -186,6 +193,35 @@ const Editor = () => {
     }));
   };
 
+  const handleMarkerImageUrlChange = (value) => {
+    setMarkerImageUrl(value);
+    setMarkerQuality(null);
+  };
+
+  const scoreMarkerQuality = async ({ file, markerUrl }) => {
+    setMarkerQualityChecking(true);
+    try {
+      const quality = file
+        ? await evaluateMarkerQualityFromImageFile(file)
+        : await evaluateMarkerQualityFromImageUrl(markerUrl);
+      setMarkerQuality(quality);
+      return quality;
+    } catch (err) {
+      const fallbackQuality = {
+        score: null,
+        rating: "Unknown",
+        dimensions: null,
+        metrics: null,
+        issues: [err?.message || "Marker quality could not be scored."],
+        summary: "Quality scoring failed. The .mind generation step will still validate the image."
+      };
+      setMarkerQuality(fallbackQuality);
+      return fallbackQuality;
+    } finally {
+      setMarkerQualityChecking(false);
+    }
+  };
+
   const uploadAsset = async (uploadFn, file, setUploading, onSuccess) => {
     if (!file) return;
     setUploading(true);
@@ -219,6 +255,7 @@ const Editor = () => {
     setSuccess(null);
 
     try {
+      const quality = await scoreMarkerQuality({ file, markerUrl: sourceUrl });
       const compiledBlob = file
         ? await compileMindFileFromImageFile(file, (progress) => setMindCompileProgress(progress))
         : await compileMindFileFromImageUrl(sourceUrl, (progress) => setMindCompileProgress(progress));
@@ -231,7 +268,9 @@ const Editor = () => {
       setMindUploading(true);
       const uploadResult = await uploadMarkerTarget(compiledFile);
       setMindFileUrl(uploadResult.url);
-      setSuccess("Marker target (.mind) generated and attached automatically.");
+      const qualityText =
+        Number.isFinite(quality?.score) ? ` Marker quality: ${quality.rating} (${quality.score}/100).` : "";
+      setSuccess(`Marker target (.mind) generated and attached automatically.${qualityText}`);
       return true;
     } catch (err) {
       const fallbackMessage =
@@ -403,7 +442,7 @@ const Editor = () => {
             contentType={contentType}
             setContentType={handleContentTypeChange}
             markerImageUrl={markerImageUrl}
-            setMarkerImageUrl={setMarkerImageUrl}
+            setMarkerImageUrl={handleMarkerImageUrlChange}
             mindFileUrl={mindFileUrl}
             setMindFileUrl={setMindFileUrl}
             contentUrl={contentUrl}
@@ -418,6 +457,8 @@ const Editor = () => {
             mindUploading={mindUploading}
             mindCompiling={mindCompiling}
             mindCompileProgress={mindCompileProgress}
+            markerQualityChecking={markerQualityChecking}
+            markerQuality={markerQuality}
             loadingBackgroundUploading={loadingBackgroundUploading}
             contentUploading={contentUploading}
             transform={transform}

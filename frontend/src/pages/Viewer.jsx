@@ -5,6 +5,7 @@ import { useMindAR } from "../lib/useMindAR";
 import { normalizeVideoOptions } from "../lib/videoOptions";
 import { normalizeLoadingScreenOptions } from "../lib/loadingScreenOptions";
 import { normalizeTrackingOptions } from "../lib/trackingOptions";
+import { patchMindARCameraSystem } from "../lib/mindARCamera";
 import { compileMindFileFromImageUrl } from "../lib/mindFileCompiler";
 
 const parseNumber = (value, fallback) => {
@@ -476,6 +477,7 @@ const Viewer = () => {
     const startMindAR = () => {
       const system = sceneEl.systems?.["mindar-image-system"];
       if (!system || mindArStartedRef.current) return;
+      patchMindARCameraSystem(system, trackingOptions);
       system.start();
       mindArStartedRef.current = true;
       queueMindARResize();
@@ -503,7 +505,7 @@ const Viewer = () => {
       sceneEl.removeEventListener("loaded", handleSceneLoaded);
       sceneEl.removeEventListener("arReady", handleArReady);
     };
-  }, [hasBootData, sceneStarted, queueMindARResize]);
+  }, [hasBootData, sceneStarted, queueMindARResize, trackingOptions]);
 
   useEffect(() => {
     resizeMindARToViewport();
