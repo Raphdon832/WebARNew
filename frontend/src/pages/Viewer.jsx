@@ -88,14 +88,12 @@ const Viewer = () => {
   const [mindTargetError, setMindTargetError] = useState(null);
   const [mindTargetFallbackActive, setMindTargetFallbackActive] = useState(false);
   const [videoError, setVideoError] = useState(null);
-  const [videoNeedsInteraction, setVideoNeedsInteraction] = useState(false);
   const [markerAspectRatio, setMarkerAspectRatio] = useState(1);
   const [videoPlaneSize, setVideoPlaneSize] = useState({ width: 1, height: 1 });
   const [viewportSize, setViewportSize] = useState(getViewportSize);
   const sceneRef = useRef(null);
   const videoRef = useRef(null);
   const targetRef = useRef(null);
-  const manualVideoStartRef = useRef(false);
   const mindArStartedRef = useRef(false);
   const targetVisibleRef = useRef(false);
 
@@ -153,7 +151,6 @@ const Viewer = () => {
     setMindTargetFallbackActive(false);
     targetVisibleRef.current = false;
     mindArStartedRef.current = false;
-    manualVideoStartRef.current = false;
   }, [slug]);
 
   useEffect(() => {
@@ -338,15 +335,24 @@ const Viewer = () => {
     if (!force && !videoOptions.autoplay) return;
 
     const playPromise = videoEl.play();
-    if (playPromise?.catch) {
+    if (playPromise?.then) {
       playPromise
         .then(() => {
-          setVideoNeedsInteraction(false);
           setVideoError(null);
         })
         .catch((err) => {
-          console.error("Video autoplay failed", err);
-          setVideoNeedsInteraction(true);
+          // Mobile browsers block audible autoplay. Keep the experience automatic by falling
+          // back to muted playback instead of showing a second tap-to-play prompt.
+          if (!videoEl.muted) {
+            videoEl.muted = true;
+            videoEl.defaultMuted = true;
+            videoEl.play().catch((retryErr) => {
+              console.error("Video playback failed", retryErr);
+            });
+            return;
+          }
+
+          console.error("Video playback failed", err);
         });
     }
   };
@@ -368,7 +374,7 @@ const Viewer = () => {
       videoEl.playbackRate = videoOptions.playbackRate;
       applyVideoStartTime(videoEl);
 
-      if (targetVisibleRef.current && (videoOptions.autoplay || manualVideoStartRef.current)) {
+      if (targetVisibleRef.current) {
         playVideo(true);
       }
     };
@@ -379,9 +385,7 @@ const Viewer = () => {
         applyVideoStartTime(videoEl);
       }
 
-      if (videoOptions.autoplay || manualVideoStartRef.current) {
-        playVideo(true);
-      }
+      playVideo(true);
     };
 
     const onTargetLost = () => {
@@ -429,7 +433,6 @@ const Viewer = () => {
 
     if (!videoOptions.autoplay) {
       videoEl.pause();
-      setVideoNeedsInteraction(true);
     }
   }, [contentType, videoOptions]);
 
@@ -640,29 +643,6 @@ const Viewer = () => {
         </div>
       )}
 
-      {contentType === "video" && videoNeedsInteraction && (
-        <button
-          type="button"
-          onClick={() => {
-            manualVideoStartRef.current = true;
-            playVideo(true);
-          }}
-          style={{
-            position: "fixed",
-            zIndex: 30,
-            left: 16,
-            top: 16,
-            padding: "10px 14px",
-            borderRadius: 10,
-            border: "1px solid rgba(255,255,255,0.3)",
-            background: "rgba(0,0,0,0.7)",
-            color: "#fff",
-            cursor: "pointer"
-          }}
-        >
-          Tap to start video
-        </button>
-      )}
       {videoError && (
         <p
           style={{
