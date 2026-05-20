@@ -62,6 +62,18 @@ const calculateVideoPlaneSize = (aspectRatio, markerAspectRatio, options) => {
   return { width: markerHeight * ratio, height: markerHeight };
 };
 
+const getViewportSize = () => {
+  if (typeof window === "undefined") {
+    return { width: 0, height: 0 };
+  }
+
+  const viewport = window.visualViewport;
+  return {
+    width: Math.round(viewport?.width || window.innerWidth || document.documentElement.clientWidth),
+    height: Math.round(viewport?.height || window.innerHeight || document.documentElement.clientHeight)
+  };
+};
+
 const Viewer = () => {
   const { slug } = useParams();
   const [project, setProject] = useState(null);
@@ -77,6 +89,7 @@ const Viewer = () => {
   const [videoNeedsInteraction, setVideoNeedsInteraction] = useState(false);
   const [markerAspectRatio, setMarkerAspectRatio] = useState(1);
   const [videoPlaneSize, setVideoPlaneSize] = useState({ width: 1, height: 1 });
+  const [viewportSize, setViewportSize] = useState(getViewportSize);
   const sceneRef = useRef(null);
   const videoRef = useRef(null);
   const targetRef = useRef(null);
@@ -85,6 +98,25 @@ const Viewer = () => {
   const targetVisibleRef = useRef(false);
 
   const { ready, error: mindArError } = useMindAR();
+
+  useEffect(() => {
+    const updateViewportSize = () => {
+      setViewportSize(getViewportSize());
+    };
+
+    updateViewportSize();
+    window.addEventListener("resize", updateViewportSize);
+    window.addEventListener("orientationchange", updateViewportSize);
+    window.visualViewport?.addEventListener("resize", updateViewportSize);
+    window.visualViewport?.addEventListener("scroll", updateViewportSize);
+
+    return () => {
+      window.removeEventListener("resize", updateViewportSize);
+      window.removeEventListener("orientationchange", updateViewportSize);
+      window.visualViewport?.removeEventListener("resize", updateViewportSize);
+      window.visualViewport?.removeEventListener("scroll", updateViewportSize);
+    };
+  }, []);
 
   useEffect(() => {
     fetchProjectBySlug(slug)
@@ -438,6 +470,13 @@ const Viewer = () => {
     };
   }, [hasBootData, sceneStarted]);
 
+  useEffect(() => {
+    const sceneEl = sceneRef.current;
+    const system = sceneEl?.systems?.["mindar-image-system"];
+    if (!system?._resize || !mindArStartedRef.current) return;
+    system._resize();
+  }, [viewportSize]);
+
   if (error) return <p style={{ padding: 24 }}>{error}</p>;
   if (mindArError)
     return <p style={{ padding: 24 }}>Failed to load AR engine. Check console for details.</p>;
@@ -460,9 +499,10 @@ const Viewer = () => {
     <div
       style={{
         position: "fixed",
-        inset: 0,
-        width: "100vw",
-        height: "100vh",
+        left: 0,
+        top: 0,
+        width: viewportSize.width ? `${viewportSize.width}px` : "100vw",
+        height: viewportSize.height ? `${viewportSize.height}px` : "100dvh",
         overflow: "hidden",
         background: "transparent",
         backgroundImage: resolvedLoadingBackgroundUrl ? `url(${resolvedLoadingBackgroundUrl})` : undefined,
@@ -606,7 +646,12 @@ const Viewer = () => {
           vr-mode-ui="enabled: false"
           device-orientation-permission-ui="enabled: true"
           renderer="alpha: true; colorManagement: true; physicallyCorrectLights: true"
-          style={{ background: "transparent" }}
+          style={{
+            background: "transparent",
+            width: "100%",
+            height: "100%",
+            display: "block"
+          }}
         >
           <a-assets>
             {contentType === "video" ? (
