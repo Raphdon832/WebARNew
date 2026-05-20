@@ -30,6 +30,8 @@ const ProjectForm = ({
   onVideoOptionChange,
   loadingScreen = {},
   onLoadingScreenChange,
+  trackingOptions = {},
+  onTrackingOptionChange,
   onGenerateMindFromMarker,
   onSave,
   saving
@@ -108,6 +110,28 @@ const ProjectForm = ({
         onChange={(e) => onVideoOptionChange(key, e.target.checked)}
       />
       {label}
+    </label>
+  );
+
+  const renderTrackingInput = ({ key, label, min, max, step, hint }) => (
+    <label key={key} style={{ display: "block", marginBottom: 12, fontSize: 13 }}>
+      <span style={{ display: "block", marginBottom: 6, color: "rgba(255,255,255,0.72)" }}>
+        {label}
+      </span>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        style={vectorInputStyle}
+        value={trackingOptions?.[key] ?? ""}
+        onChange={(e) => onTrackingOptionChange(key, e.target.value)}
+      />
+      {hint && (
+        <small style={{ display: "block", marginTop: 5, color: "rgba(255,255,255,0.56)" }}>
+          {hint}
+        </small>
+      )}
     </label>
   );
 
@@ -335,6 +359,50 @@ const ProjectForm = ({
           </div>
         </div>
       )}
+
+      <div style={optionCardStyle}>
+        <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Tracking Stability</h3>
+        <small style={{ display: "block", marginBottom: 12, color: "rgba(255,255,255,0.65)" }}>
+          Stabilizes marker pose jitter in the published viewer. Lower beta is steadier; higher beta
+          reacts faster but can shake more.
+        </small>
+        <div style={vectorGridStyle}>
+          {renderTrackingInput({
+            key: "filterMinCF",
+            label: "Min Cutoff",
+            min: "0.0001",
+            max: "1",
+            step: "0.0001",
+            hint: "Keep low for smoother still shots."
+          })}
+          {renderTrackingInput({
+            key: "filterBeta",
+            label: "Motion Beta",
+            min: "0",
+            max: "1000",
+            step: "1",
+            hint: "8 is stable; 20+ responds faster."
+          })}
+          {renderTrackingInput({
+            key: "missTolerance",
+            label: "Miss Frames",
+            min: "1",
+            max: "30",
+            step: "1",
+            hint: "Higher reduces flicker when tracking briefly drops."
+          })}
+        </div>
+        <div style={{ marginTop: 2 }}>
+          {renderTrackingInput({
+            key: "warmupTolerance",
+            label: "Warmup Frames",
+            min: "1",
+            max: "30",
+            step: "1",
+            hint: "Higher waits for a steadier lock before showing content."
+          })}
+        </div>
+      </div>
 
       <div style={optionCardStyle}>
         <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Loading Screen</h3>

@@ -20,6 +20,11 @@ import {
   toInputLoadingScreenOptions
 } from "../lib/loadingScreenOptions";
 import {
+  createDefaultTrackingOptions,
+  normalizeTrackingOptions,
+  toInputTrackingOptions
+} from "../lib/trackingOptions";
+import {
   compileMindFileFromImageFile,
   compileMindFileFromImageUrl
 } from "../lib/mindFileCompiler";
@@ -70,6 +75,7 @@ const Editor = () => {
   const [transform, setTransform] = useState(createDefaultTransform("model"));
   const [videoOptions, setVideoOptions] = useState(createDefaultVideoOptions());
   const [loadingScreen, setLoadingScreen] = useState(createDefaultLoadingScreenOptions());
+  const [trackingOptions, setTrackingOptions] = useState(createDefaultTrackingOptions());
   const [projectSlug, setProjectSlug] = useState(null);
   const [saving, setSaving] = useState(false);
   const [loadingProject, setLoadingProject] = useState(Boolean(isEditing));
@@ -106,6 +112,7 @@ const Editor = () => {
         setTransform(toInputTransform(config.transform, nextType));
         setVideoOptions(toInputVideoOptions(config.videoOptions));
         setLoadingScreen(toInputLoadingScreenOptions(config.loadingScreen));
+        setTrackingOptions(toInputTrackingOptions(config.trackingOptions));
         setProjectSlug(project.slug || null);
       })
       .catch((err) => {
@@ -166,6 +173,13 @@ const Editor = () => {
 
   const handleLoadingScreenChange = (key, value) => {
     setLoadingScreen((prev) => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const handleTrackingOptionChange = (key, value) => {
+    setTrackingOptions((prev) => ({
       ...prev,
       [key]: value
     }));
@@ -312,6 +326,7 @@ const Editor = () => {
 
     const normalizedVideoOptions = normalizeVideoOptions(videoOptions);
     const normalizedLoadingScreen = normalizeLoadingScreenOptions(loadingScreen);
+    const normalizedTrackingOptions = normalizeTrackingOptions(trackingOptions);
 
     setSaving(true);
     setError(null);
@@ -328,7 +343,8 @@ const Editor = () => {
           labelText,
           transform: normalizedTransform,
           videoOptions: normalizedVideoOptions,
-          loadingScreen: normalizedLoadingScreen
+          loadingScreen: normalizedLoadingScreen,
+          trackingOptions: normalizedTrackingOptions
         }
       };
 
@@ -407,6 +423,8 @@ const Editor = () => {
             onVideoOptionChange={handleVideoOptionChange}
             loadingScreen={loadingScreen}
             onLoadingScreenChange={handleLoadingScreenChange}
+            trackingOptions={trackingOptions}
+            onTrackingOptionChange={handleTrackingOptionChange}
             onGenerateMindFromMarker={() => handleGenerateMindFromMarker()}
             onSave={handleSave}
             saving={saving}

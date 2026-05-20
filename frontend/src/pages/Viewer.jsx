@@ -4,6 +4,7 @@ import { fetchProjectBySlug } from "../api/projects";
 import { useMindAR } from "../lib/useMindAR";
 import { normalizeVideoOptions } from "../lib/videoOptions";
 import { normalizeLoadingScreenOptions } from "../lib/loadingScreenOptions";
+import { normalizeTrackingOptions } from "../lib/trackingOptions";
 import { compileMindFileFromImageUrl } from "../lib/mindFileCompiler";
 
 const parseNumber = (value, fallback) => {
@@ -192,10 +193,15 @@ const Viewer = () => {
   const rawTransform = config.transform;
   const rawVideoOptions = config.videoOptions;
   const rawLoadingScreen = config.loadingScreen;
+  const rawTrackingOptions = config.trackingOptions;
   const videoOptions = useMemo(() => normalizeVideoOptions(rawVideoOptions), [rawVideoOptions]);
   const loadingScreen = useMemo(
     () => normalizeLoadingScreenOptions(rawLoadingScreen),
     [rawLoadingScreen]
+  );
+  const trackingOptions = useMemo(
+    () => normalizeTrackingOptions(rawTrackingOptions),
+    [rawTrackingOptions]
   );
 
   const resolvedTransform = resolveTransform(rawTransform, contentType);
@@ -508,6 +514,14 @@ const Viewer = () => {
     return <p style={{ padding: 24 }}>Failed to load AR engine. Check console for details.</p>;
 
   const videoScale = `${videoOptions.flipHorizontal ? -1 : 1} ${videoOptions.flipVertical ? -1 : 1} 1`;
+  const mindArConfig = [
+    `imageTargetSrc: ${mindTargetSrc}`,
+    "autoStart: false",
+    `filterMinCF: ${trackingOptions.filterMinCF}`,
+    `filterBeta: ${trackingOptions.filterBeta}`,
+    `warmupTolerance: ${trackingOptions.warmupTolerance}`,
+    `missTolerance: ${trackingOptions.missTolerance}`
+  ].join("; ");
   const showLoadingOverlay = !sceneStarted || !project || !ready || !mindTargetSrc;
   const canClickStart = Boolean(project && ready && mindTargetSrc && loadingScreen.showStartButton);
   const loadingLabel =
@@ -668,7 +682,7 @@ const Viewer = () => {
         <a-scene
           ref={sceneRef}
           embedded
-          mindar-image={`imageTargetSrc: ${mindTargetSrc}; autoStart: false;`}
+          mindar-image={mindArConfig}
           vr-mode-ui="enabled: false"
           device-orientation-permission-ui="enabled: false"
           renderer="alpha: true; colorManagement: true; physicallyCorrectLights: true"
