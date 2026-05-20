@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import EditorCanvas from "../components/EditorCanvas";
 import ProjectForm from "../components/ProjectForm";
+import ViewerQRCode from "../components/ViewerQRCode";
 import { createProject, fetchProjectById, updateProject } from "../api/projects";
 import {
   uploadMarkerImage,
@@ -371,6 +372,8 @@ const Editor = () => {
     );
   }
 
+  const viewerUrl = projectSlug ? `${window.location.origin}/v/${projectSlug}` : "";
+
   return (
     <div className="editor-layout">
       <div className="editor-hero">
@@ -434,9 +437,10 @@ const Editor = () => {
           {projectSlug && (
             <div className="publish-callout">
               <p>Viewer URL</p>
-              <a href={`${window.location.origin}/v/${projectSlug}`} target="_blank" rel="noreferrer">
-                {window.location.origin}/v/{projectSlug}
+              <a href={viewerUrl} target="_blank" rel="noreferrer">
+                {viewerUrl}
               </a>
+              <ViewerQRCode url={viewerUrl} />
             </div>
           )}
         </div>

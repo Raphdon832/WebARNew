@@ -285,6 +285,51 @@ const styles = `
     letter-spacing: 0.04em;
   }
 
+  .publish-callout a {
+    color: #a7f3d0;
+    overflow-wrap: anywhere;
+  }
+
+  .qr-panel {
+    margin-top: 14px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .qr-panel span {
+    display: block;
+    color: rgba(219, 255, 237, 0.68);
+    font-size: 12px;
+  }
+
+  .qr-box {
+    width: 148px;
+    min-height: 148px;
+    padding: 10px;
+    border-radius: 14px;
+    background: #ffffff;
+    display: grid;
+    place-items: center;
+    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.24);
+  }
+
+  .qr-box img {
+    display: block;
+    width: 128px;
+    height: 128px;
+  }
+
+  .qr-box span {
+    color: #152034;
+    text-align: center;
+  }
+
+  .qr-download {
+    width: max-content;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
   @media (max-width: 980px) {
     .dashboard-hero h1,
     .editor-hero h1 {
