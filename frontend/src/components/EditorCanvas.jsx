@@ -47,6 +47,7 @@ const EditorCanvas = ({
   const videoPreviewRef = useRef(null);
   const activeGestureRef = useRef(null);
   const [gizmoMode, setGizmoMode] = useState("move");
+  const [previewMuted, setPreviewMuted] = useState(true);
   const [markerAspectRatio, setMarkerAspectRatio] = useState(1);
   const [videoAspectRatio, setVideoAspectRatio] = useState(16 / 9);
   const [previewAreaSize, setPreviewAreaSize] = useState({ width: 0, height: 0 });
@@ -151,12 +152,14 @@ const EditorCanvas = ({
     if (!videoEl) return;
 
     videoEl.playbackRate = playbackRate;
+    videoEl.muted = previewMuted;
+    videoEl.defaultMuted = previewMuted;
     if (videoOptions?.autoplay) {
       videoEl.play().catch(() => {});
     } else {
       videoEl.pause();
     }
-  }, [hasVideoPreview, playbackRate, videoOptions?.autoplay]);
+  }, [hasVideoPreview, playbackRate, videoOptions?.autoplay, previewMuted]);
 
   const markerRenderSize = useMemo(() => {
     const width = previewAreaSize.width;
@@ -303,6 +306,23 @@ const EditorCanvas = ({
             Approximate marker-plane composition
           </p>
         </div>
+        {contentType === "video" && (
+          <button
+            type="button"
+            onClick={() => setPreviewMuted((prev) => !prev)}
+            style={{
+              borderRadius: 999,
+              border: "1px solid rgba(255,255,255,0.32)",
+              padding: "6px 12px",
+              fontSize: 12,
+              cursor: "pointer",
+              color: "#fff",
+              background: "rgba(0,0,0,0.5)"
+            }}
+          >
+            {previewMuted ? "Unmute Preview" : "Mute Preview"}
+          </button>
+        )}
       </div>
 
       <div style={frameStyle}>
@@ -392,7 +412,7 @@ const EditorCanvas = ({
                     <video
                       ref={videoPreviewRef}
                       src={normalizedContentUrl}
-                      muted={Boolean(videoOptions?.muted)}
+                      muted={previewMuted}
                       autoPlay={Boolean(videoOptions?.autoplay)}
                       loop={Boolean(videoOptions?.loop)}
                       controls={Boolean(videoOptions?.showControls)}
