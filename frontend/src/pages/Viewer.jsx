@@ -76,6 +76,7 @@ const Viewer = () => {
   const targetRef = useRef(null);
   const manualVideoStartRef = useRef(false);
   const mindArStartedRef = useRef(false);
+  const targetVisibleRef = useRef(false);
 
   const { ready, error: mindArError } = useMindAR();
 
@@ -95,6 +96,7 @@ const Viewer = () => {
     setMindTargetCompileProgress(0);
     setMindTargetError(null);
     setMindTargetFallbackActive(false);
+    targetVisibleRef.current = false;
     mindArStartedRef.current = false;
     manualVideoStartRef.current = false;
   }, [slug]);
@@ -240,6 +242,7 @@ const Viewer = () => {
   const playVideo = (force = false) => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
+    if (!targetVisibleRef.current) return;
 
     videoEl.muted = videoOptions.muted;
     videoEl.defaultMuted = videoOptions.muted;
@@ -279,12 +282,13 @@ const Viewer = () => {
       videoEl.playbackRate = videoOptions.playbackRate;
       applyVideoStartTime(videoEl);
 
-      if (videoOptions.autoplay) {
+      if (targetVisibleRef.current && (videoOptions.autoplay || manualVideoStartRef.current)) {
         playVideo(true);
       }
     };
 
     const onTargetFound = () => {
+      targetVisibleRef.current = true;
       if (videoOptions.restartOnTargetFound) {
         applyVideoStartTime(videoEl);
       }
@@ -295,9 +299,9 @@ const Viewer = () => {
     };
 
     const onTargetLost = () => {
-      if (videoOptions.pauseWhenTargetLost) {
-        videoEl.pause();
-      }
+      targetVisibleRef.current = false;
+      // Always pause media audio when marker leaves camera view.
+      videoEl.pause();
     };
 
     const onVideoError = () => {
@@ -313,11 +317,11 @@ const Viewer = () => {
     targetEl.addEventListener("targetLost", onTargetLost);
 
     updateVideoPlane();
-    if (videoOptions.autoplay) {
-      playVideo(true);
-    }
+    videoEl.pause();
 
     return () => {
+      targetVisibleRef.current = false;
+      videoEl.pause();
       videoEl.removeEventListener("loadedmetadata", updateVideoPlane);
       videoEl.removeEventListener("canplay", onCanPlay);
       videoEl.removeEventListener("error", onVideoError);
