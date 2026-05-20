@@ -35,26 +35,31 @@ const resolveTransform = (rawTransform = {}, contentType = "model") => {
   };
 };
 
-const calculateVideoPlaneSize = (aspectRatio, options) => {
+const calculateVideoPlaneSize = (aspectRatio, markerAspectRatio, options) => {
   let ratio = aspectRatio;
+  let markerRatio = markerAspectRatio;
   if (!Number.isFinite(ratio) || ratio <= 0) ratio = 16 / 9;
+  if (!Number.isFinite(markerRatio) || markerRatio <= 0) markerRatio = 1;
   if (options.invertAspectRatio && ratio > 0) ratio = 1 / ratio;
 
+  const markerWidth = 1;
+  const markerHeight = markerWidth / markerRatio;
+
   if (!options.maintainAspectRatio || options.fit === "fill") {
-    return { width: 1, height: 1 };
+    return { width: markerWidth, height: markerHeight };
   }
 
   if (options.fit === "cover") {
-    if (ratio >= 1) {
-      return { width: ratio, height: 1 };
+    if (ratio >= markerRatio) {
+      return { width: markerHeight * ratio, height: markerHeight };
     }
-    return { width: 1, height: 1 / ratio };
+    return { width: markerWidth, height: markerWidth / ratio };
   }
 
-  if (ratio >= 1) {
-    return { width: 1, height: 1 / ratio };
+  if (ratio >= markerRatio) {
+    return { width: markerWidth, height: markerWidth / ratio };
   }
-  return { width: ratio, height: 1 };
+  return { width: markerHeight * ratio, height: markerHeight };
 };
 
 const Viewer = () => {
@@ -70,7 +75,8 @@ const Viewer = () => {
   const [mindTargetFallbackActive, setMindTargetFallbackActive] = useState(false);
   const [videoError, setVideoError] = useState(null);
   const [videoNeedsInteraction, setVideoNeedsInteraction] = useState(false);
-  const [videoPlaneSize, setVideoPlaneSize] = useState({ width: 1, height: 0.5625 });
+  const [markerAspectRatio, setMarkerAspectRatio] = useState(1);
+  const [videoPlaneSize, setVideoPlaneSize] = useState({ width: 1, height: 1 });
   const sceneRef = useRef(null);
   const videoRef = useRef(null);
   const targetRef = useRef(null);
@@ -155,6 +161,32 @@ const Viewer = () => {
   const resolvedContentUrl = normalizeAssetUrl(contentUrl);
   const resolvedLoadingBackgroundUrl = normalizeAssetUrl(loadingScreen.backgroundImageUrl);
   const hasBootData = Boolean(project && ready && mindTargetSrc);
+
+  useEffect(() => {
+    if (!resolvedMarkerImageUrl) {
+      setMarkerAspectRatio(1);
+      return;
+    }
+
+    let active = true;
+    const image = new Image();
+    image.onload = () => {
+      if (!active) return;
+      if (!image.naturalWidth || !image.naturalHeight) return;
+      const ratio = image.naturalWidth / image.naturalHeight;
+      if (Number.isFinite(ratio) && ratio > 0) {
+        setMarkerAspectRatio(ratio);
+      }
+    };
+    image.onerror = () => {
+      if (active) setMarkerAspectRatio(1);
+    };
+    image.src = resolvedMarkerImageUrl;
+
+    return () => {
+      active = false;
+    };
+  }, [resolvedMarkerImageUrl]);
 
   useEffect(() => {
     let active = true;
@@ -275,7 +307,7 @@ const Viewer = () => {
 
     const updateVideoPlane = () => {
       const ratio = videoEl.videoWidth && videoEl.videoHeight ? videoEl.videoWidth / videoEl.videoHeight : 16 / 9;
-      setVideoPlaneSize(calculateVideoPlaneSize(ratio, videoOptions));
+      setVideoPlaneSize(calculateVideoPlaneSize(ratio, markerAspectRatio, videoOptions));
     };
 
     const onCanPlay = () => {
@@ -328,7 +360,7 @@ const Viewer = () => {
       targetEl.removeEventListener("targetFound", onTargetFound);
       targetEl.removeEventListener("targetLost", onTargetLost);
     };
-  }, [ready, project, contentType, videoOptions, sceneStarted]);
+  }, [ready, project, contentType, videoOptions, sceneStarted, markerAspectRatio]);
 
   useEffect(() => {
     if (contentType !== "video") return;
@@ -582,7 +614,7 @@ const Viewer = () => {
                 id="video-overlay"
                 ref={videoRef}
                 src={resolvedContentUrl}
-                autoPlay={videoOptions.autoplay}
+                autoPlay={false}
                 muted={videoOptions.muted}
                 loop={videoOptions.loop}
                 playsInline={videoOptions.playsInline}
