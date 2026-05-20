@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { fetchProjectBySlug } from "../api/projects";
 import { useMindAR } from "../lib/useMindAR";
@@ -98,6 +98,21 @@ const Viewer = () => {
   const targetVisibleRef = useRef(false);
 
   const { ready, error: mindArError } = useMindAR();
+
+  const resizeMindARToViewport = useCallback(() => {
+    const sceneEl = sceneRef.current;
+    const system = sceneEl?.systems?.["mindar-image-system"];
+    if (!system?._resize || !mindArStartedRef.current || !system.video || !system.controller) return;
+
+    system._resize();
+  }, []);
+
+  const queueMindARResize = useCallback(() => {
+    window.requestAnimationFrame(resizeMindARToViewport);
+    [120, 350, 900].forEach((delay) => {
+      window.setTimeout(resizeMindARToViewport, delay);
+    });
+  }, [resizeMindARToViewport]);
 
   useEffect(() => {
     const updateViewportSize = () => {
@@ -457,25 +472,36 @@ const Viewer = () => {
       if (!system || mindArStartedRef.current) return;
       system.start();
       mindArStartedRef.current = true;
+      queueMindARResize();
+    };
+
+    const handleArReady = () => {
+      queueMindARResize();
     };
 
     if (sceneEl.hasLoaded) {
+      sceneEl.addEventListener("arReady", handleArReady, { once: true });
       startMindAR();
-      return;
+      return () => {
+        sceneEl.removeEventListener("arReady", handleArReady);
+      };
     }
 
-    sceneEl.addEventListener("loaded", startMindAR, { once: true });
-    return () => {
-      sceneEl.removeEventListener("loaded", startMindAR);
+    const handleSceneLoaded = () => {
+      sceneEl.addEventListener("arReady", handleArReady, { once: true });
+      startMindAR();
     };
-  }, [hasBootData, sceneStarted]);
+
+    sceneEl.addEventListener("loaded", handleSceneLoaded, { once: true });
+    return () => {
+      sceneEl.removeEventListener("loaded", handleSceneLoaded);
+      sceneEl.removeEventListener("arReady", handleArReady);
+    };
+  }, [hasBootData, sceneStarted, queueMindARResize]);
 
   useEffect(() => {
-    const sceneEl = sceneRef.current;
-    const system = sceneEl?.systems?.["mindar-image-system"];
-    if (!system?._resize || !mindArStartedRef.current) return;
-    system._resize();
-  }, [viewportSize]);
+    resizeMindARToViewport();
+  }, [resizeMindARToViewport, viewportSize]);
 
   if (error) return <p style={{ padding: 24 }}>{error}</p>;
   if (mindArError)
@@ -644,7 +670,7 @@ const Viewer = () => {
           embedded
           mindar-image={`imageTargetSrc: ${mindTargetSrc}; autoStart: false;`}
           vr-mode-ui="enabled: false"
-          device-orientation-permission-ui="enabled: true"
+          device-orientation-permission-ui="enabled: false"
           renderer="alpha: true; colorManagement: true; physicallyCorrectLights: true"
           style={{
             background: "transparent",
@@ -673,7 +699,11 @@ const Viewer = () => {
             )}
           </a-assets>
 
-          <a-camera position="0 0 0" look-controls="enabled: true"></a-camera>
+          <a-camera
+            position="0 0 0"
+            look-controls="enabled: false"
+            wasd-controls="enabled: false"
+          ></a-camera>
 
           <a-entity ref={targetRef} mindar-image-target="targetIndex: 0">
             <a-entity
