@@ -8,7 +8,7 @@ const AFRAME_SRC =
 const MINDAR_SRC =
   "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js";
 
-const loadExternalScript = (id, src) =>
+export const loadExternalScript = (id, src, attributes = {}) =>
   new Promise((resolve, reject) => {
     const existing = document.getElementById(id);
 
@@ -32,6 +32,9 @@ const loadExternalScript = (id, src) =>
     script.src = src;
     script.async = true;
     script.crossOrigin = "anonymous";
+    Object.entries(attributes).forEach(([key, value]) => {
+      script.setAttribute(key, value);
+    });
     script.addEventListener(
       "load",
       () => {
@@ -67,12 +70,20 @@ export const ensureMindARLoaded = async () => {
   return loadPromise;
 };
 
-export const useMindAR = () => {
+export const useMindAR = (enabled = true) => {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     let active = true;
+
+    if (!enabled) {
+      setReady(false);
+      setError(null);
+      return () => {
+        active = false;
+      };
+    }
 
     ensureMindARLoaded()
       .then(() => {
@@ -86,7 +97,7 @@ export const useMindAR = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [enabled]);
 
   return { ready, error };
 };

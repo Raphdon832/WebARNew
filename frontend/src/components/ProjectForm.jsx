@@ -35,6 +35,8 @@ const ProjectForm = ({
   trackingOptions = {},
   onTrackingOptionChange,
   onGenerateMindFromMarker,
+  onGenerateEighthWallTarget,
+  eighthWallGenerating,
   onSave,
   saving
 }) => {
@@ -137,6 +139,26 @@ const ProjectForm = ({
     </label>
   );
 
+  const renderTrackingTextInput = ({ key, label, placeholder, hint }) => (
+    <label key={key} style={{ display: "block", marginBottom: 12, fontSize: 13 }}>
+      <span style={{ display: "block", marginBottom: 6, color: "rgba(255,255,255,0.72)" }}>
+        {label}
+      </span>
+      <input
+        type="text"
+        placeholder={placeholder}
+        style={vectorInputStyle}
+        value={trackingOptions?.[key] ?? ""}
+        onChange={(e) => onTrackingOptionChange(key, e.target.value)}
+      />
+      {hint && (
+        <small style={{ display: "block", marginTop: 5, color: "rgba(255,255,255,0.56)" }}>
+          {hint}
+        </small>
+      )}
+    </label>
+  );
+
   const markerQualityColor =
     markerQuality?.score === null || markerQuality?.score === undefined
       ? "#9fb4d8"
@@ -145,6 +167,7 @@ const ProjectForm = ({
         : markerQuality.score >= 52
           ? "#ffd166"
           : "#ff8c8c";
+  const selectedArEngine = trackingOptions?.arEngine === "8thwall" ? "8thwall" : "mindar";
 
   return (
     <div style={{ width: "100%", maxWidth: 480 }}>
@@ -411,11 +434,135 @@ const ProjectForm = ({
       )}
 
       <div style={optionCardStyle}>
-        <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Tracking Stability</h3>
+        <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>AR Engine & Tracking</h3>
         <small style={{ display: "block", marginBottom: 12, color: "rgba(255,255,255,0.65)" }}>
-          Stabilizes marker pose jitter in the published viewer. Lower beta is steadier; higher beta
-          reacts faster but can shake more.
+          MindAR is the production engine. 8th Wall is experimental here and needs 8th Wall target
+          data for reliable image tracking.
         </small>
+        <label style={{ display: "block", marginBottom: 12, fontSize: 13 }}>
+          <span style={{ display: "block", marginBottom: 6, color: "rgba(255,255,255,0.72)" }}>
+            AR Runtime
+          </span>
+          <select
+            value={selectedArEngine}
+            style={vectorInputStyle}
+            onChange={(e) => onTrackingOptionChange("arEngine", e.target.value)}
+          >
+            <option value="mindar">MindAR (production)</option>
+            <option value="8thwall">8th Wall (experimental)</option>
+          </select>
+        </label>
+
+        {selectedArEngine === "8thwall" && (
+          <div
+            style={{
+              marginBottom: 14,
+              padding: 10,
+              borderRadius: 8,
+              border: "1px solid rgba(255,209,102,0.42)",
+              background: "rgba(255,209,102,0.08)"
+            }}
+          >
+            <small style={{ color: "rgba(255,245,210,0.86)" }}>
+              Generate an 8th Wall Image Target JSON from the marker image before publishing this
+              runtime. The viewer uses this JSON instead of a .mind file.
+            </small>
+            <div style={{ marginTop: 10 }}>
+              {renderTrackingTextInput({
+                key: "eighthWallTargetName",
+                label: "8th Wall Target Name",
+                placeholder: "webar-marker",
+                hint: "Must match the name inside the 8th Wall target JSON."
+              })}
+              {renderTrackingTextInput({
+                key: "eighthWallTargetUrl",
+                label: "8th Wall Target JSON URL",
+                placeholder: "https://cdn.example.com/image-target.json",
+                hint: "Generated automatically from the marker image for 8th Wall tracking."
+              })}
+              {renderTrackingInput({
+                key: "eighthWallRotationCorrectionZ",
+                label: "8th Wall Rotation Fix",
+                min: "-360",
+                max: "360",
+                step: "1",
+                hint: "-90 fixes the default 8th Wall image-target plane orientation."
+              })}
+              <button
+                type="button"
+                onClick={onGenerateEighthWallTarget}
+                disabled={eighthWallGenerating || markerUploading}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(255,209,102,0.55)",
+                  background: "rgba(255,209,102,0.14)",
+                  color: "#ffe7a3",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  fontSize: 13
+                }}
+              >
+                {eighthWallGenerating
+                  ? "Generating 8th Wall Target..."
+                  : "Generate 8th Wall Target"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <small style={{ display: "block", marginBottom: 12, color: "rgba(255,255,255,0.65)" }}>
+          Stabilizes marker pose jitter in the published viewer. Higher smoothing is steadier but
+          adds more visual lag.
+        </small>
+        <div style={booleanGridStyle}>
+          <label
+            style={{
+              fontSize: 13,
+              color: "rgba(255,255,255,0.85)",
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              border: "1px solid rgba(255,255,255,0.12)",
+              padding: "8px 10px",
+              borderRadius: 8,
+              background: "rgba(4,10,24,0.45)"
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={trackingOptions?.poseSmoothingEnabled !== false}
+              onChange={(e) => onTrackingOptionChange("poseSmoothingEnabled", e.target.checked)}
+            />
+            Pose Smoothing
+          </label>
+        </div>
+        <div style={vectorGridStyle}>
+          {renderTrackingInput({
+            key: "poseSmoothingAmount",
+            label: "Smooth Amount",
+            min: "0",
+            max: "0.95",
+            step: "0.01",
+            hint: "0.72 is steady; lower tracks faster."
+          })}
+          {renderTrackingInput({
+            key: "poseSmoothingDeadband",
+            label: "Position Deadband",
+            min: "0",
+            max: "0.05",
+            step: "0.0005",
+            hint: "Freezes tiny position changes."
+          })}
+          {renderTrackingInput({
+            key: "poseRotationDeadband",
+            label: "Rotation Deadband",
+            min: "0",
+            max: "5",
+            step: "0.05",
+            hint: "Degrees ignored before smoothing."
+          })}
+        </div>
         <div style={vectorGridStyle}>
           {renderTrackingInput({
             key: "filterMinCF",
@@ -457,17 +604,25 @@ const ProjectForm = ({
             key: "cameraWidth",
             label: "Camera Width",
             min: "640",
-            max: "1920",
+            max: "2560",
             step: "1",
-            hint: "1280 recommended."
+            hint: "1920 improves detail when the device can sustain it."
           })}
           {renderTrackingInput({
             key: "cameraHeight",
             label: "Camera Height",
             min: "360",
-            max: "1080",
+            max: "1440",
             step: "1",
-            hint: "720 recommended."
+            hint: "1080 pairs with 1920 width."
+          })}
+          {renderTrackingInput({
+            key: "cameraFrameRate",
+            label: "Camera FPS",
+            min: "15",
+            max: "60",
+            step: "1",
+            hint: "30 is the most stable default."
           })}
         </div>
       </div>
@@ -554,6 +709,7 @@ const ProjectForm = ({
           markerUploading ||
           mindUploading ||
           mindCompiling ||
+          eighthWallGenerating ||
           loadingBackgroundUploading ||
           contentUploading
         }

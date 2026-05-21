@@ -38,6 +38,16 @@ const rewriteConfigUploadUrls = (config, publicOrigin) => {
     rewrittenConfig[key] = rewriteUploadUrlIfLocalhost(rewrittenConfig[key], publicOrigin);
   });
 
+  if (rewrittenConfig.trackingOptions && typeof rewrittenConfig.trackingOptions === "object") {
+    rewrittenConfig.trackingOptions = {
+      ...rewrittenConfig.trackingOptions,
+      eighthWallTargetUrl: rewriteUploadUrlIfLocalhost(
+        rewrittenConfig.trackingOptions.eighthWallTargetUrl,
+        publicOrigin
+      )
+    };
+  }
+
   if (rewrittenConfig.loadingScreen && typeof rewrittenConfig.loadingScreen === "object") {
     rewrittenConfig.loadingScreen = {
       ...rewrittenConfig.loadingScreen,

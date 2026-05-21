@@ -5,6 +5,7 @@ import ProjectForm from "../components/ProjectForm";
 import ViewerQRCode from "../components/ViewerQRCode";
 import { createProject, fetchProjectById, updateProject } from "../api/projects";
 import {
+  generateEighthWallTarget,
   uploadMarkerImage,
   uploadMarkerTarget,
   uploadModel,
@@ -88,6 +89,7 @@ const Editor = () => {
   const [mindUploading, setMindUploading] = useState(false);
   const [mindCompiling, setMindCompiling] = useState(false);
   const [mindCompileProgress, setMindCompileProgress] = useState(0);
+  const [eighthWallGenerating, setEighthWallGenerating] = useState(false);
   const [markerQualityChecking, setMarkerQualityChecking] = useState(false);
   const [markerQuality, setMarkerQuality] = useState(null);
   const [loadingBackgroundUploading, setLoadingBackgroundUploading] = useState(false);
@@ -196,6 +198,10 @@ const Editor = () => {
   const handleMarkerImageUrlChange = (value) => {
     setMarkerImageUrl(value);
     setMarkerQuality(null);
+    setTrackingOptions((prev) => ({
+      ...prev,
+      eighthWallTargetUrl: ""
+    }));
   };
 
   const scoreMarkerQuality = async ({ file, markerUrl }) => {
@@ -290,6 +296,42 @@ const Editor = () => {
     }
   };
 
+  const handleGenerateEighthWallTarget = async ({ markerUrl, silentError } = {}) => {
+    const sourceUrl = markerUrl || markerImageUrl;
+    if (!sourceUrl) {
+      setError("Provide a marker image first, then generate the 8th Wall target file");
+      return null;
+    }
+
+    setEighthWallGenerating(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const target = await generateEighthWallTarget({
+        markerImageUrl: sourceUrl,
+        targetName: trackingOptions.eighthWallTargetName || name || "webar-marker"
+      });
+
+      setTrackingOptions((prev) => ({
+        ...prev,
+        eighthWallTargetName: target.targetName || prev.eighthWallTargetName,
+        eighthWallTargetUrl: target.url
+      }));
+
+      const warningText = target.warnings?.length ? ` ${target.warnings.join(" ")}` : "";
+      setSuccess(`8th Wall image target generated and attached automatically.${warningText}`);
+      return target;
+    } catch (err) {
+      if (!silentError) {
+        setError(err.response?.data?.message || "8th Wall target generation failed");
+      }
+      return null;
+    } finally {
+      setEighthWallGenerating(false);
+    }
+  };
+
   const handleMarkerImageUpload = async (file) => {
     if (!file) return;
 
@@ -301,6 +343,10 @@ const Editor = () => {
       const { url } = await uploadMarkerImage(file);
       setMarkerImageUrl(url);
       await handleGenerateMindFromMarker({ file, markerUrl: url, silentError: false });
+      await handleGenerateEighthWallTarget({
+        markerUrl: url,
+        silentError: trackingOptions.arEngine !== "8thwall"
+      });
     } catch (err) {
       setError(err.response?.data?.message || "Marker image upload failed");
     } finally {
@@ -328,11 +374,28 @@ const Editor = () => {
     );
 
   const handleSave = async () => {
+    let normalizedTrackingOptions = normalizeTrackingOptions(trackingOptions);
+
     if (!name || !markerImageUrl || !contentUrl) {
       setError("Project name, marker image, and content are required");
       return;
     }
-    if (markerImageUrl.includes("/uploads/markers/") && !mindFileUrl) {
+    if (normalizedTrackingOptions.arEngine === "8thwall" && !normalizedTrackingOptions.eighthWallTargetUrl) {
+      const target = await handleGenerateEighthWallTarget({ silentError: false });
+      if (!target?.url) return;
+
+      normalizedTrackingOptions = normalizeTrackingOptions({
+        ...trackingOptions,
+        eighthWallTargetName: target.targetName,
+        eighthWallTargetUrl: target.url
+      });
+    }
+
+    if (
+      normalizedTrackingOptions.arEngine === "mindar" &&
+      markerImageUrl.includes("/uploads/markers/") &&
+      !mindFileUrl
+    ) {
       setError("Please upload the matching .mind marker target file for uploaded markers");
       return;
     }
@@ -366,7 +429,6 @@ const Editor = () => {
 
     const normalizedVideoOptions = normalizeVideoOptions(videoOptions);
     const normalizedLoadingScreen = normalizeLoadingScreenOptions(loadingScreen);
-    const normalizedTrackingOptions = normalizeTrackingOptions(trackingOptions);
 
     setSaving(true);
     setError(null);
@@ -470,6 +532,8 @@ const Editor = () => {
             trackingOptions={trackingOptions}
             onTrackingOptionChange={handleTrackingOptionChange}
             onGenerateMindFromMarker={() => handleGenerateMindFromMarker()}
+            onGenerateEighthWallTarget={() => handleGenerateEighthWallTarget()}
+            eighthWallGenerating={eighthWallGenerating}
             onSave={handleSave}
             saving={saving}
           />

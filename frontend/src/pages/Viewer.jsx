@@ -2,10 +2,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams } from "react-router-dom";
 import { fetchProjectBySlug } from "../api/projects";
 import { useMindAR } from "../lib/useMindAR";
+import { use8thWall } from "../lib/use8thWall";
 import { normalizeVideoOptions } from "../lib/videoOptions";
 import { normalizeLoadingScreenOptions } from "../lib/loadingScreenOptions";
 import { normalizeTrackingOptions } from "../lib/trackingOptions";
 import { patchMindARCameraSystem } from "../lib/mindARCamera";
+import { registerMindARPoseSmoothing } from "../lib/mindARPoseSmoothing";
 import { compileMindFileFromImageUrl } from "../lib/mindFileCompiler";
 
 const parseNumber = (value, fallback) => {
@@ -14,6 +16,11 @@ const parseNumber = (value, fallback) => {
 };
 
 const toVectorString = (vector) => `${vector.x} ${vector.y} ${vector.z}`;
+
+const addRotationZ = (rotation, zOffset = 0) => ({
+  ...rotation,
+  z: rotation.z + zOffset
+});
 
 const resolveTransform = (rawTransform = {}, contentType = "model") => {
   const defaultScale = contentType === "video" ? 1 : 0.2;
@@ -76,6 +83,69 @@ const getViewportSize = () => {
   };
 };
 
+const isAbsoluteAssetUrl = (url = "") =>
+  /^(https?:|blob:|data:)/i.test(url);
+
+const resolveRelativeAssetUrl = (assetUrl, baseUrl) => {
+  if (!assetUrl || isAbsoluteAssetUrl(assetUrl)) return assetUrl;
+  try {
+    return new URL(assetUrl, baseUrl).href;
+  } catch (_err) {
+    return assetUrl;
+  }
+};
+
+const createEightWallTargetFromImage = (imageUrl, targetName) =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const width = image.naturalWidth || 640;
+      const height = image.naturalHeight || 480;
+      const now = Date.now();
+
+      resolve({
+        imagePath: imageUrl,
+        metadata: null,
+        name: targetName || "webar-marker",
+        type: "PLANAR",
+        properties: {
+          top: 0,
+          left: 0,
+          width,
+          height,
+          originalWidth: width,
+          originalHeight: height,
+          isRotated: false
+        },
+        resources: {
+          originalImage: imageUrl,
+          croppedImage: imageUrl,
+          thumbnailImage: imageUrl,
+          luminanceImage: imageUrl
+        },
+        created: now,
+        updated: now
+      });
+    };
+    image.onerror = () => reject(new Error("Failed to load marker image for 8th Wall target."));
+    image.src = imageUrl;
+  });
+
+const normalizeEightWallTargetData = (rawData, targetName, markerImageUrl, jsonUrl) => {
+  const data = Array.isArray(rawData) ? rawData[0] : rawData;
+  if (!data || typeof data !== "object") {
+    throw new Error("Invalid 8th Wall image target JSON.");
+  }
+
+  const imagePath = data.imagePath || data.resources?.luminanceImage || markerImageUrl;
+
+  return {
+    ...data,
+    name: data.name || targetName || "webar-marker",
+    imagePath: resolveRelativeAssetUrl(imagePath, jsonUrl || markerImageUrl)
+  };
+};
+
 const Viewer = () => {
   const { slug } = useParams();
   const [project, setProject] = useState(null);
@@ -87,6 +157,12 @@ const Viewer = () => {
   const [mindTargetCompileProgress, setMindTargetCompileProgress] = useState(0);
   const [mindTargetError, setMindTargetError] = useState(null);
   const [mindTargetFallbackActive, setMindTargetFallbackActive] = useState(false);
+  const [eighthWallTargetData, setEighthWallTargetData] = useState(null);
+  const [eighthWallTargetPreparing, setEighthWallTargetPreparing] = useState(false);
+  const [eighthWallTargetFallbackActive, setEighthWallTargetFallbackActive] = useState(false);
+  const [eighthWallTargetError, setEighthWallTargetError] = useState(null);
+  const [eighthWallConfigured, setEighthWallConfigured] = useState(false);
+  const [poseSmoothingReady, setPoseSmoothingReady] = useState(false);
   const [videoError, setVideoError] = useState(null);
   const [markerAspectRatio, setMarkerAspectRatio] = useState(1);
   const [videoPlaneSize, setVideoPlaneSize] = useState({ width: 1, height: 1 });
@@ -97,7 +173,18 @@ const Viewer = () => {
   const mindArStartedRef = useRef(false);
   const targetVisibleRef = useRef(false);
 
-  const { ready, error: mindArError } = useMindAR();
+  const selectedArEngine =
+    project?.config?.trackingOptions?.arEngine === "8thwall" ? "8thwall" : "mindar";
+  const isEightWallEngine = selectedArEngine === "8thwall";
+  const isMindAREngine = !isEightWallEngine;
+  const { ready: mindARReady, error: mindArError } = useMindAR(
+    Boolean(project) && isMindAREngine
+  );
+  const { ready: eighthWallReady, error: eighthWallError } = use8thWall(
+    Boolean(project) && isEightWallEngine
+  );
+  const ready = isEightWallEngine ? eighthWallReady : mindARReady;
+  const engineError = isEightWallEngine ? eighthWallError : mindArError;
 
   const resizeMindARToViewport = useCallback(() => {
     const sceneEl = sceneRef.current;
@@ -149,16 +236,29 @@ const Viewer = () => {
     setMindTargetCompileProgress(0);
     setMindTargetError(null);
     setMindTargetFallbackActive(false);
+    setEighthWallTargetData(null);
+    setEighthWallTargetPreparing(false);
+    setEighthWallTargetFallbackActive(false);
+    setEighthWallTargetError(null);
+    setEighthWallConfigured(false);
+    setPoseSmoothingReady(false);
     targetVisibleRef.current = false;
     mindArStartedRef.current = false;
   }, [slug]);
 
   useEffect(() => {
+    const engineReady = ready && (isEightWallEngine || poseSmoothingReady);
     const targetProgress = !project
       ? 34
-      : !ready
+      : !engineReady
         ? 68
-        : mindTargetPreparing
+        : isEightWallEngine
+          ? eighthWallTargetPreparing
+            ? 84
+            : eighthWallConfigured
+              ? 100
+              : 92
+          : mindTargetPreparing
           ? 84
           : mindTargetSrc
             ? 100
@@ -172,7 +272,16 @@ const Viewer = () => {
     }, 70);
 
     return () => window.clearInterval(timer);
-  }, [project, ready, mindTargetPreparing, mindTargetSrc]);
+  }, [
+    project,
+    ready,
+    isEightWallEngine,
+    poseSmoothingReady,
+    eighthWallTargetPreparing,
+    eighthWallConfigured,
+    mindTargetPreparing,
+    mindTargetSrc
+  ]);
 
   const normalizeAssetUrl = (url) => {
     if (!url) return url;
@@ -203,15 +312,37 @@ const Viewer = () => {
   );
 
   const resolvedTransform = resolveTransform(rawTransform, contentType);
+  const correctedRotation = isEightWallEngine
+    ? addRotationZ(resolvedTransform.rotation, trackingOptions.eighthWallRotationCorrectionZ)
+    : resolvedTransform.rotation;
   const transformPosition = toVectorString(resolvedTransform.position);
-  const transformRotation = toVectorString(resolvedTransform.rotation);
+  const transformRotation = toVectorString(correctedRotation);
   const transformScale = toVectorString(resolvedTransform.scale);
   const mindFileUrl =
     normalizeAssetUrl(explicitMindFileUrl || markerImageUrl?.replace(/\.(png|jpg|jpeg)$/i, ".mind"));
   const resolvedMarkerImageUrl = normalizeAssetUrl(markerImageUrl);
   const resolvedContentUrl = normalizeAssetUrl(contentUrl);
   const resolvedLoadingBackgroundUrl = normalizeAssetUrl(loadingScreen.backgroundImageUrl);
-  const hasBootData = Boolean(project && ready && mindTargetSrc);
+  const engineRuntimeReady = ready && (isEightWallEngine || poseSmoothingReady);
+  const hasBootData = Boolean(
+    project &&
+      engineRuntimeReady &&
+      (isEightWallEngine ? eighthWallConfigured : mindTargetSrc)
+  );
+
+  useEffect(() => {
+    if (!isMindAREngine) {
+      setPoseSmoothingReady(false);
+      return;
+    }
+
+    if (!ready) {
+      setPoseSmoothingReady(false);
+      return;
+    }
+
+    setPoseSmoothingReady(registerMindARPoseSmoothing());
+  }, [ready, isMindAREngine]);
 
   useEffect(() => {
     if (!resolvedMarkerImageUrl) {
@@ -243,7 +374,7 @@ const Viewer = () => {
     let active = true;
     let compiledMindObjectUrl = null;
 
-    if (!project || !ready) return;
+    if (!project || !ready || !isMindAREngine) return;
 
     const verifyMindFileUrl = async (url) => {
       try {
@@ -313,7 +444,96 @@ const Viewer = () => {
       active = false;
       if (compiledMindObjectUrl) URL.revokeObjectURL(compiledMindObjectUrl);
     };
-  }, [project, ready, mindFileUrl, resolvedMarkerImageUrl]);
+  }, [project, ready, isMindAREngine, mindFileUrl, resolvedMarkerImageUrl]);
+
+  useEffect(() => {
+    let active = true;
+
+    setEighthWallTargetData(null);
+    setEighthWallConfigured(false);
+    setEighthWallTargetError(null);
+    setEighthWallTargetFallbackActive(false);
+
+    if (!project || !ready || !isEightWallEngine) {
+      setEighthWallTargetPreparing(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    const loadEightWallTarget = async () => {
+      setEighthWallTargetPreparing(true);
+
+      try {
+        let targetData;
+        const jsonUrl = normalizeAssetUrl(trackingOptions.eighthWallTargetUrl);
+
+        if (jsonUrl) {
+          const response = await fetch(jsonUrl, { cache: "no-store" });
+          if (!response.ok) {
+            throw new Error("8th Wall target JSON could not be loaded.");
+          }
+          const data = await response.json();
+          targetData = normalizeEightWallTargetData(
+            data,
+            trackingOptions.eighthWallTargetName,
+            resolvedMarkerImageUrl,
+            jsonUrl
+          );
+        } else if (resolvedMarkerImageUrl) {
+          targetData = await createEightWallTargetFromImage(
+            resolvedMarkerImageUrl,
+            trackingOptions.eighthWallTargetName
+          );
+          setEighthWallTargetFallbackActive(true);
+        } else {
+          throw new Error("Provide a marker image or 8th Wall target JSON.");
+        }
+
+        if (!active) return;
+        setEighthWallTargetData(targetData);
+      } catch (err) {
+        if (!active) return;
+        setEighthWallTargetError(
+          err?.message || "8th Wall target data could not be prepared."
+        );
+      } finally {
+        if (active) setEighthWallTargetPreparing(false);
+      }
+    };
+
+    loadEightWallTarget();
+
+    return () => {
+      active = false;
+    };
+  }, [
+    project,
+    ready,
+    isEightWallEngine,
+    resolvedMarkerImageUrl,
+    trackingOptions.eighthWallTargetName,
+    trackingOptions.eighthWallTargetUrl
+  ]);
+
+  useEffect(() => {
+    setEighthWallConfigured(false);
+
+    if (!isEightWallEngine || !ready || !eighthWallTargetData || !window.XR8?.XrController) {
+      return;
+    }
+
+    try {
+      window.XR8.XrController.configure({
+        disableWorldTracking: true,
+        imageTargetData: [eighthWallTargetData]
+      });
+      setEighthWallConfigured(true);
+    } catch (err) {
+      console.error("8th Wall configuration failed", err);
+      setEighthWallTargetError("8th Wall engine could not be configured for this target.");
+    }
+  }, [isEightWallEngine, ready, eighthWallTargetData]);
 
   const applyVideoStartTime = (videoEl) => {
     if (!videoEl) return;
@@ -403,8 +623,10 @@ const Viewer = () => {
     videoEl.addEventListener("loadedmetadata", updateVideoPlane);
     videoEl.addEventListener("canplay", onCanPlay);
     videoEl.addEventListener("error", onVideoError);
-    targetEl.addEventListener("targetFound", onTargetFound);
-    targetEl.addEventListener("targetLost", onTargetLost);
+    const targetFoundEvent = isEightWallEngine ? "xrextrasfound" : "targetFound";
+    const targetLostEvent = isEightWallEngine ? "xrextraslost" : "targetLost";
+    targetEl.addEventListener(targetFoundEvent, onTargetFound);
+    targetEl.addEventListener(targetLostEvent, onTargetLost);
 
     updateVideoPlane();
     videoEl.pause();
@@ -415,10 +637,18 @@ const Viewer = () => {
       videoEl.removeEventListener("loadedmetadata", updateVideoPlane);
       videoEl.removeEventListener("canplay", onCanPlay);
       videoEl.removeEventListener("error", onVideoError);
-      targetEl.removeEventListener("targetFound", onTargetFound);
-      targetEl.removeEventListener("targetLost", onTargetLost);
+      targetEl.removeEventListener(targetFoundEvent, onTargetFound);
+      targetEl.removeEventListener(targetLostEvent, onTargetLost);
     };
-  }, [ready, project, contentType, videoOptions, sceneStarted, markerAspectRatio]);
+  }, [
+    ready,
+    project,
+    contentType,
+    videoOptions,
+    sceneStarted,
+    markerAspectRatio,
+    isEightWallEngine
+  ]);
 
   useEffect(() => {
     if (contentType !== "video") return;
@@ -472,6 +702,7 @@ const Viewer = () => {
 
   useEffect(() => {
     if (!hasBootData || !sceneStarted) return;
+    if (!isMindAREngine) return;
     if (mindArStartedRef.current) return;
 
     const sceneEl = sceneRef.current;
@@ -508,15 +739,20 @@ const Viewer = () => {
       sceneEl.removeEventListener("loaded", handleSceneLoaded);
       sceneEl.removeEventListener("arReady", handleArReady);
     };
-  }, [hasBootData, sceneStarted, queueMindARResize, trackingOptions]);
+  }, [hasBootData, sceneStarted, isMindAREngine, queueMindARResize, trackingOptions]);
 
   useEffect(() => {
     resizeMindARToViewport();
   }, [resizeMindARToViewport, viewportSize]);
 
   if (error) return <p style={{ padding: 24 }}>{error}</p>;
-  if (mindArError)
-    return <p style={{ padding: 24 }}>Failed to load AR engine. Check console for details.</p>;
+  if (engineError)
+    return (
+      <p style={{ padding: 24 }}>
+        Failed to load {isEightWallEngine ? "8th Wall" : "MindAR"} engine. Check console for
+        details.
+      </p>
+    );
 
   const videoScale = `${videoOptions.flipHorizontal ? -1 : 1} ${videoOptions.flipVertical ? -1 : 1} 1`;
   const mindArConfig = [
@@ -527,14 +763,47 @@ const Viewer = () => {
     `warmupTolerance: ${trackingOptions.warmupTolerance}`,
     `missTolerance: ${trackingOptions.missTolerance}`
   ].join("; ");
-  const showLoadingOverlay = !sceneStarted || !project || !ready || !mindTargetSrc;
-  const canClickStart = Boolean(project && ready && mindTargetSrc && loadingScreen.showStartButton);
+  const poseSmoothingConfig = [
+    `enabled: ${trackingOptions.poseSmoothingEnabled}`,
+    `amount: ${trackingOptions.poseSmoothingAmount}`,
+    `positionDeadband: ${trackingOptions.poseSmoothingDeadband}`,
+    `rotationDeadband: ${trackingOptions.poseRotationDeadband}`
+  ].join("; ");
+  const sceneEngineProps = isEightWallEngine
+    ? {
+        xrconfig:
+          "allowedDevices: any; cameraDirection: back; disableDefaultEnvironment: true; disableDesktopCameraControls: true; disableDesktopTouchEmulation: true",
+        xrweb: "disableWorldTracking: true; scale: responsive",
+        "xrextras-runtime-error": ""
+      }
+    : {
+        "mindar-image": mindArConfig
+      };
+  const targetEngineProps = isEightWallEngine
+    ? {
+        "xrextras-named-image-target": `name: ${trackingOptions.eighthWallTargetName}`
+      }
+    : {
+        "mindar-image-target": "targetIndex: 0",
+        "webar-pose-smoothing": poseSmoothingConfig
+      };
+  const targetReady = isEightWallEngine ? eighthWallConfigured : Boolean(mindTargetSrc);
+  const showLoadingOverlay = !sceneStarted || !project || !engineRuntimeReady || !targetReady;
+  const canClickStart = Boolean(
+    project && engineRuntimeReady && targetReady && loadingScreen.showStartButton
+  );
   const loadingLabel =
     !project
       ? "Fetching experience..."
-      : !ready
+      : !engineRuntimeReady
         ? "Initializing AR engine..."
-        : mindTargetPreparing
+        : isEightWallEngine
+          ? eighthWallTargetPreparing
+            ? "Preparing 8th Wall target..."
+            : eighthWallTargetError
+              ? "8th Wall target unavailable"
+              : "Ready to start"
+          : mindTargetPreparing
           ? "Preparing marker target..."
           : mindTargetError
             ? "Marker target unavailable"
@@ -599,12 +868,17 @@ const Viewer = () => {
                 Rebuilding .mind from marker image: {Math.round(mindTargetCompileProgress)}%
               </p>
             )}
-            {mindTargetFallbackActive && !mindTargetPreparing && (
+            {isEightWallEngine && eighthWallTargetFallbackActive && !eighthWallTargetPreparing && (
+              <p style={{ margin: "8px 0 0", fontSize: 12, color: "rgba(255,209,102,0.9)" }}>
+                Using experimental marker-derived 8th Wall target data.
+              </p>
+            )}
+            {!isEightWallEngine && mindTargetFallbackActive && !mindTargetPreparing && (
               <p style={{ margin: "8px 0 0", fontSize: 12, color: "rgba(133,255,205,0.86)" }}>
                 Marker target regenerated automatically.
               </p>
             )}
-            {mindTargetError && (
+            {(mindTargetError || eighthWallTargetError) && (
               <p
                 style={{
                   margin: "10px 0 0",
@@ -616,7 +890,7 @@ const Viewer = () => {
                   border: "1px solid rgba(255,180,180,0.45)"
                 }}
               >
-                {mindTargetError}
+                {isEightWallEngine ? eighthWallTargetError : mindTargetError}
               </p>
             )}
             {canClickStart && (
@@ -660,11 +934,11 @@ const Viewer = () => {
           {videoError}
         </p>
       )}
-      {project && ready && mindTargetSrc && (
+      {project && engineRuntimeReady && targetReady && (
         <a-scene
           ref={sceneRef}
           embedded
-          mindar-image={mindArConfig}
+          {...sceneEngineProps}
           vr-mode-ui="enabled: false"
           device-orientation-permission-ui="enabled: false"
           renderer="alpha: true; colorManagement: true; physicallyCorrectLights: true"
@@ -701,7 +975,7 @@ const Viewer = () => {
             wasd-controls="enabled: false"
           ></a-camera>
 
-          <a-entity ref={targetRef} mindar-image-target="targetIndex: 0">
+          <a-entity ref={targetRef} {...targetEngineProps}>
             <a-entity
               position={transformPosition}
               rotation={transformRotation}
