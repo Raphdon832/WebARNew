@@ -1,0 +1,12 @@
+# Netlify config for the IDENTIFYNG marketing site (separate site from the Studio app).
+# In the Netlify UI set the site's "Base directory" to `marketing` so these paths resolve.
+
+[build]
+  command = "npm ci && npm run build"
+  publish = "dist"
+
+# Single-page-app routing fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
