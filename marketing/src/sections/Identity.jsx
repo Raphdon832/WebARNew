@@ -82,7 +82,7 @@ const Identity = () => (
 
           <Reveal delay={200}>
             <div className="btn-row mt-24">
-              <a className="btn btn--ghost btn--lg" href="/#contact">Talk to our team</a>
+              <a className="btn btn--ghost btn--lg" href="/contact">Talk to our team</a>
             </div>
           </Reveal>
         </div>

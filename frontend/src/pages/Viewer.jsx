@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { fetchProjectBySlug } from "../api/projects";
+import { fetchViewerProject } from "../api/projects";
 import { useMindAR } from "../lib/useMindAR";
 import { use8thWall } from "../lib/use8thWall";
 import { normalizeVideoOptions } from "../lib/videoOptions";
@@ -8,7 +8,7 @@ import { normalizeLoadingScreenOptions } from "../lib/loadingScreenOptions";
 import { normalizeTrackingOptions } from "../lib/trackingOptions";
 import { patchMindARCameraSystem } from "../lib/mindARCamera";
 import { registerMindARPoseSmoothing } from "../lib/mindARPoseSmoothing";
-import { compileMindFileFromImageUrl } from "../lib/mindFileCompiler";
+import IdentifyngLogo from "../components/IdentifyngLogo";
 
 const parseNumber = (value, fallback) => {
   const parsed = Number.parseFloat(value);
@@ -95,42 +95,6 @@ const resolveRelativeAssetUrl = (assetUrl, baseUrl) => {
   }
 };
 
-const createEightWallTargetFromImage = (imageUrl, targetName) =>
-  new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => {
-      const width = image.naturalWidth || 640;
-      const height = image.naturalHeight || 480;
-      const now = Date.now();
-
-      resolve({
-        imagePath: imageUrl,
-        metadata: null,
-        name: targetName || "webar-marker",
-        type: "PLANAR",
-        properties: {
-          top: 0,
-          left: 0,
-          width,
-          height,
-          originalWidth: width,
-          originalHeight: height,
-          isRotated: false
-        },
-        resources: {
-          originalImage: imageUrl,
-          croppedImage: imageUrl,
-          thumbnailImage: imageUrl,
-          luminanceImage: imageUrl
-        },
-        created: now,
-        updated: now
-      });
-    };
-    image.onerror = () => reject(new Error("Failed to load marker image for 8th Wall target."));
-    image.src = imageUrl;
-  });
-
 const normalizeEightWallTargetData = (rawData, targetName, markerImageUrl, jsonUrl) => {
   const data = Array.isArray(rawData) ? rawData[0] : rawData;
   if (!data || typeof data !== "object") {
@@ -146,24 +110,264 @@ const normalizeEightWallTargetData = (rawData, targetName, markerImageUrl, jsonU
   };
 };
 
+const BRAND_SPLASH_DURATION_MS = 650;
+const SCAN_OVERLAY_STYLES = `
+@keyframes identifyngScanPulse {
+  0%, 100% { opacity: 0.58; transform: scale(0.98); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes identifyngScanLine {
+  0% { transform: translateY(-46%); opacity: 0; }
+  15%, 85% { opacity: 1; }
+  100% { transform: translateY(46%); opacity: 0; }
+}
+
+@keyframes identifyngLoaderOrbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes identifyngLoaderIconSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+
+@keyframes identifyngLoaderLogoPulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  58% { transform: translate(-50%, -50%) scale(1.045); }
+}
+
+@keyframes identifyngLoaderShimmer {
+  from { transform: translateX(-45%); opacity: 0.25; }
+  50% { opacity: 0.82; }
+  to { transform: translateX(95%); opacity: 0.25; }
+}
+
+@keyframes identifyngLoadingLabelPulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+.identifyng-loader-stage {
+  width: min(360px, calc(100vw - 48px));
+  min-height: min(410px, calc(100dvh - 64px));
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.identifyng-loader-orbit {
+  --loader-size: min(232px, 62vw);
+  --loader-radius: calc(var(--loader-size) * 0.43);
+  position: relative;
+  width: var(--loader-size);
+  height: var(--loader-size);
+}
+
+.identifyng-loader-orbit::before {
+  content: "";
+  position: absolute;
+  inset: 11%;
+  border: 1px dashed rgba(127, 207, 194, 0.5);
+  border-radius: 50%;
+  box-shadow: 0 0 34px rgba(127, 207, 194, 0.16);
+}
+
+.identifyng-loader-orbit-spinner {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  animation: identifyngLoaderOrbit 10.5s linear infinite;
+}
+
+.identifyng-loader-logo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 118px;
+  max-width: 48%;
+  transform: translate(-50%, -50%);
+  animation: identifyngLoaderLogoPulse 1.4s ease-in-out infinite;
+}
+
+.identifyng-loader-icon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 42px;
+  height: 42px;
+  margin: -21px 0 0 -21px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: currentColor;
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+
+.identifyng-loader-icon-glyph {
+  display: block;
+  width: 26px;
+  height: 26px;
+  animation: identifyngLoaderIconSpin 10.5s linear infinite;
+}
+
+.identifyng-loader-icon-glyph svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.identifyng-loader-progress {
+  position: relative;
+  width: min(320px, 78vw);
+  height: 16px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(127, 207, 194, 0.58);
+  background: rgba(255, 255, 255, 0.36);
+  box-shadow: 0 16px 36px rgba(8, 27, 39, 0.16);
+}
+
+.identifyng-loader-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  min-width: 18px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ffffff 0%, #d8d8d8 48%, #050505 100%);
+  transition: width 180ms ease;
+}
+
+.identifyng-loader-progress-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 58%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.78), transparent);
+  animation: identifyngLoaderShimmer 1.35s ease-in-out infinite;
+}
+
+.identifyng-loader-label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  animation: identifyngLoadingLabelPulse 1.25s ease-in-out infinite;
+}
+
+.identifyng-loader-percent {
+  margin: -6px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.identifyng-loader-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  min-width: 156px;
+  max-width: min(280px, 78vw);
+  min-height: 38px;
+  padding: 9px 22px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.identifyng-scan-frame {
+  position: relative;
+  width: min(62vw, 310px);
+  aspect-ratio: 1 / 1;
+  border: 2px solid rgba(255, 255, 255, 0.82);
+  border-radius: 18px;
+  box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.08), 0 18px 50px rgba(0, 0, 0, 0.22);
+  animation: identifyngScanPulse 2.2s ease-in-out infinite;
+}
+
+.identifyng-scan-frame::before,
+.identifyng-scan-frame::after {
+  content: "";
+  position: absolute;
+  width: 42px;
+  height: 42px;
+  border-color: #7fcfc2;
+  border-style: solid;
+}
+
+.identifyng-scan-frame::before {
+  left: -5px;
+  top: -5px;
+  border-width: 4px 0 0 4px;
+  border-radius: 18px 0 0 0;
+}
+
+.identifyng-scan-frame::after {
+  right: -5px;
+  bottom: -5px;
+  border-width: 0 4px 4px 0;
+  border-radius: 0 0 18px 0;
+}
+
+.identifyng-scan-line {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 50%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(127, 207, 194, 0.95), transparent);
+  box-shadow: 0 0 18px rgba(127, 207, 194, 0.75);
+  animation: identifyngScanLine 2.35s ease-in-out infinite;
+}
+`;
+
+const requiresSecureCameraOrigin = () => {
+  if (typeof window === "undefined") return false;
+  if (window.location.protocol === "https:") return false;
+
+  return !["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+};
+
+const isIOSWebKit = () => {
+  if (typeof navigator === "undefined") return false;
+  const platform = navigator.platform || "";
+  const userAgent = navigator.userAgent || "";
+
+  return (
+    /iPad|iPhone|iPod/.test(userAgent) ||
+    (platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+};
+
 const Viewer = () => {
-  const { slug } = useParams();
+  const { slug, projectId } = useParams();
   const [project, setProject] = useState(null);
   const [error, setError] = useState(null);
   const [loadingProgress, setLoadingProgress] = useState(10);
   const [sceneStarted, setSceneStarted] = useState(false);
+  const [arSessionReady, setArSessionReady] = useState(false);
+  const [brandSplashComplete, setBrandSplashComplete] = useState(false);
   const [mindTargetSrc, setMindTargetSrc] = useState(null);
   const [mindTargetPreparing, setMindTargetPreparing] = useState(false);
-  const [mindTargetCompileProgress, setMindTargetCompileProgress] = useState(0);
   const [mindTargetError, setMindTargetError] = useState(null);
-  const [mindTargetFallbackActive, setMindTargetFallbackActive] = useState(false);
   const [eighthWallTargetData, setEighthWallTargetData] = useState(null);
   const [eighthWallTargetPreparing, setEighthWallTargetPreparing] = useState(false);
-  const [eighthWallTargetFallbackActive, setEighthWallTargetFallbackActive] = useState(false);
   const [eighthWallTargetError, setEighthWallTargetError] = useState(null);
   const [eighthWallConfigured, setEighthWallConfigured] = useState(false);
   const [poseSmoothingReady, setPoseSmoothingReady] = useState(false);
+  const [cameraError, setCameraError] = useState(null);
   const [videoError, setVideoError] = useState(null);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  const [audioUnlockNeeded, setAudioUnlockNeeded] = useState(false);
+  const [targetVisible, setTargetVisible] = useState(false);
   const [markerAspectRatio, setMarkerAspectRatio] = useState(1);
   const [videoPlaneSize, setVideoPlaneSize] = useState({ width: 1, height: 1 });
   const [viewportSize, setViewportSize] = useState(getViewportSize);
@@ -172,6 +376,8 @@ const Viewer = () => {
   const targetRef = useRef(null);
   const mindArStartedRef = useRef(false);
   const targetVisibleRef = useRef(false);
+  const effectiveVideoMutedRef = useRef(false);
+  const audioUnlockInFlightRef = useRef(false);
 
   const selectedArEngine =
     project?.config?.trackingOptions?.arEngine === "8thwall" ? "8thwall" : "mindar";
@@ -221,30 +427,38 @@ const Viewer = () => {
   }, []);
 
   useEffect(() => {
-    fetchProjectBySlug(slug)
+    fetchViewerProject({ slug, projectId })
       .then(setProject)
       .catch((err) => {
         console.error(err);
         setError("Experience not found or unavailable.");
       });
-  }, [slug]);
+  }, [slug, projectId]);
+
+  useEffect(() => {
+    document.title = project?.name ? `${project.name} | iDentifyng` : "iDentifyng";
+  }, [project?.name]);
 
   useEffect(() => {
     setSceneStarted(false);
+    setArSessionReady(false);
+    setBrandSplashComplete(false);
     setMindTargetSrc(null);
     setMindTargetPreparing(false);
-    setMindTargetCompileProgress(0);
     setMindTargetError(null);
-    setMindTargetFallbackActive(false);
     setEighthWallTargetData(null);
     setEighthWallTargetPreparing(false);
-    setEighthWallTargetFallbackActive(false);
     setEighthWallTargetError(null);
     setEighthWallConfigured(false);
     setPoseSmoothingReady(false);
+    setCameraError(null);
+    setAudioEnabled(false);
+    setAudioUnlockNeeded(false);
+    setTargetVisible(false);
     targetVisibleRef.current = false;
+    audioUnlockInFlightRef.current = false;
     mindArStartedRef.current = false;
-  }, [slug]);
+  }, [slug, projectId]);
 
   useEffect(() => {
     const engineReady = ready && (isEightWallEngine || poseSmoothingReady);
@@ -318,8 +532,7 @@ const Viewer = () => {
   const transformPosition = toVectorString(resolvedTransform.position);
   const transformRotation = toVectorString(correctedRotation);
   const transformScale = toVectorString(resolvedTransform.scale);
-  const mindFileUrl =
-    normalizeAssetUrl(explicitMindFileUrl || markerImageUrl?.replace(/\.(png|jpg|jpeg)$/i, ".mind"));
+  const mindFileUrl = normalizeAssetUrl(explicitMindFileUrl);
   const resolvedMarkerImageUrl = normalizeAssetUrl(markerImageUrl);
   const resolvedContentUrl = normalizeAssetUrl(contentUrl);
   const resolvedLoadingBackgroundUrl = normalizeAssetUrl(loadingScreen.backgroundImageUrl);
@@ -329,6 +542,18 @@ const Viewer = () => {
       engineRuntimeReady &&
       (isEightWallEngine ? eighthWallConfigured : mindTargetSrc)
   );
+  const startsUnmutedFromStudio = contentType === "video" && !videoOptions.muted;
+  const needsIOSAudioUnlock = Boolean(
+    startsUnmutedFromStudio && videoOptions.autoplay && isIOSWebKit()
+  );
+  const shouldWaitForStartGesture = loadingScreen.showStartButton || needsIOSAudioUnlock;
+  const effectiveVideoMuted = Boolean(
+    contentType === "video" && videoOptions.muted
+  );
+
+  useEffect(() => {
+    effectiveVideoMutedRef.current = effectiveVideoMuted;
+  }, [effectiveVideoMuted]);
 
   useEffect(() => {
     if (!isMindAREngine) {
@@ -372,7 +597,6 @@ const Viewer = () => {
 
   useEffect(() => {
     let active = true;
-    let compiledMindObjectUrl = null;
 
     if (!project || !ready || !isMindAREngine) return;
 
@@ -390,50 +614,27 @@ const Viewer = () => {
 
     const resolveMindTarget = async () => {
       setMindTargetPreparing(true);
-      setMindTargetCompileProgress(0);
       setMindTargetError(null);
-      setMindTargetFallbackActive(false);
       setMindTargetSrc(null);
 
-      const candidateUrls = [];
-      if (mindFileUrl) candidateUrls.push(mindFileUrl);
-      const derivedFromMarker = resolvedMarkerImageUrl?.replace(/\.(png|jpg|jpeg)$/i, ".mind");
-      if (derivedFromMarker && !candidateUrls.includes(derivedFromMarker)) {
-        candidateUrls.push(derivedFromMarker);
+      if (!mindFileUrl) {
+        setMindTargetError(
+          "Marker target file (.mind) is missing. Re-open this project in the studio and attach the generated .mind target."
+        );
+        setMindTargetPreparing(false);
+        return;
       }
 
-      for (const candidateUrl of candidateUrls) {
-        const isUsable = await verifyMindFileUrl(candidateUrl);
-        if (!active) return;
-        if (isUsable) {
-          setMindTargetSrc(candidateUrl);
-          setMindTargetPreparing(false);
-          return;
-        }
-      }
-
-      if (resolvedMarkerImageUrl) {
-        try {
-          const compiledBlob = await compileMindFileFromImageUrl(
-            resolvedMarkerImageUrl,
-            (progress) => {
-              if (active) setMindTargetCompileProgress(progress);
-            }
-          );
-          if (!active) return;
-          compiledMindObjectUrl = URL.createObjectURL(compiledBlob);
-          setMindTargetSrc(compiledMindObjectUrl);
-          setMindTargetFallbackActive(true);
-          setMindTargetPreparing(false);
-          return;
-        } catch (_err) {
-          if (!active) return;
-        }
-      }
-
+      const isUsable = await verifyMindFileUrl(mindFileUrl);
       if (!active) return;
+      if (isUsable) {
+        setMindTargetSrc(mindFileUrl);
+        setMindTargetPreparing(false);
+        return;
+      }
+
       setMindTargetError(
-        "Marker target file (.mind) is unavailable. Re-open this project in the editor and regenerate .mind."
+        "Marker target file (.mind) is unavailable. Re-open this project in the studio and regenerate the .mind target."
       );
       setMindTargetPreparing(false);
     };
@@ -442,9 +643,8 @@ const Viewer = () => {
 
     return () => {
       active = false;
-      if (compiledMindObjectUrl) URL.revokeObjectURL(compiledMindObjectUrl);
     };
-  }, [project, ready, isMindAREngine, mindFileUrl, resolvedMarkerImageUrl]);
+  }, [project, ready, isMindAREngine, mindFileUrl]);
 
   useEffect(() => {
     let active = true;
@@ -452,7 +652,6 @@ const Viewer = () => {
     setEighthWallTargetData(null);
     setEighthWallConfigured(false);
     setEighthWallTargetError(null);
-    setEighthWallTargetFallbackActive(false);
 
     if (!project || !ready || !isEightWallEngine) {
       setEighthWallTargetPreparing(false);
@@ -480,14 +679,10 @@ const Viewer = () => {
             resolvedMarkerImageUrl,
             jsonUrl
           );
-        } else if (resolvedMarkerImageUrl) {
-          targetData = await createEightWallTargetFromImage(
-            resolvedMarkerImageUrl,
-            trackingOptions.eighthWallTargetName
-          );
-          setEighthWallTargetFallbackActive(true);
         } else {
-          throw new Error("Provide a marker image or 8th Wall target JSON.");
+          throw new Error(
+            "8th Wall target JSON is missing. Re-open this project in the studio and generate the 8th Wall target."
+          );
         }
 
         if (!active) return;
@@ -542,33 +737,30 @@ const Viewer = () => {
     videoEl.currentTime = videoOptions.startTimeSec;
   };
 
-  const playVideo = (force = false) => {
+  const playVideo = () => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
     if (!targetVisibleRef.current) return;
 
-    videoEl.muted = videoOptions.muted;
-    videoEl.defaultMuted = videoOptions.muted;
+    const shouldMute = effectiveVideoMutedRef.current;
+    videoEl.muted = shouldMute;
+    videoEl.defaultMuted = shouldMute;
     videoEl.playsInline = videoOptions.playsInline;
     videoEl.playbackRate = videoOptions.playbackRate;
 
-    if (!force && !videoOptions.autoplay) return;
+    if (!videoOptions.autoplay) return;
 
     const playPromise = videoEl.play();
     if (playPromise?.then) {
       playPromise
         .then(() => {
           setVideoError(null);
+          if (!videoEl.muted) setAudioUnlockNeeded(false);
         })
         .catch((err) => {
-          // Mobile browsers block audible autoplay. Keep the experience automatic by falling
-          // back to muted playback instead of showing a second tap-to-play prompt.
           if (!videoEl.muted) {
-            videoEl.muted = true;
-            videoEl.defaultMuted = true;
-            videoEl.play().catch((retryErr) => {
-              console.error("Video playback failed", retryErr);
-            });
+            setAudioUnlockNeeded(true);
+            console.error("Unmuted video playback was blocked", err);
             return;
           }
 
@@ -576,6 +768,123 @@ const Viewer = () => {
         });
     }
   };
+
+  const enableViewerAudio = () => {
+    const videoEl = videoRef.current;
+    setAudioUnlockNeeded(false);
+    if (!videoEl) return;
+    if (audioUnlockInFlightRef.current) return;
+
+    videoEl.muted = false;
+    videoEl.defaultMuted = false;
+    videoEl.volume = 1;
+    videoEl.playsInline = videoOptions.playsInline;
+    videoEl.playbackRate = videoOptions.playbackRate;
+
+    if (targetVisibleRef.current || videoOptions.autoplay) {
+      const shouldPauseAfterPrime = !targetVisibleRef.current;
+      videoEl.load();
+      audioUnlockInFlightRef.current = true;
+      const playPromise = videoEl.play();
+      const onUnlocked = () => {
+        audioUnlockInFlightRef.current = false;
+        setAudioEnabled(true);
+        setVideoError(null);
+        setAudioUnlockNeeded(false);
+        if (shouldPauseAfterPrime) {
+          videoEl.pause();
+          applyVideoStartTime(videoEl);
+        }
+      };
+      const onBlocked = (err) => {
+        audioUnlockInFlightRef.current = false;
+        console.error("Video audio playback failed", err);
+        setAudioEnabled(false);
+        setAudioUnlockNeeded(true);
+      };
+
+      if (playPromise?.then) {
+        playPromise.then(onUnlocked).catch(onBlocked);
+      } else {
+        onUnlocked();
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (contentType !== "video") return undefined;
+    if (!startsUnmutedFromStudio || !videoOptions.autoplay) return undefined;
+    if (audioEnabled && !audioUnlockNeeded) return undefined;
+    if (shouldWaitForStartGesture && !sceneStarted) return undefined;
+
+    const handleViewerGesture = () => {
+      if (!videoRef.current) return;
+      enableViewerAudio();
+    };
+
+    const options = { capture: true, passive: true };
+    window.addEventListener("pointerdown", handleViewerGesture, options);
+    window.addEventListener("touchend", handleViewerGesture, options);
+    window.addEventListener("keydown", handleViewerGesture, { capture: true });
+
+    return () => {
+      window.removeEventListener("pointerdown", handleViewerGesture, options);
+      window.removeEventListener("touchend", handleViewerGesture, options);
+      window.removeEventListener("keydown", handleViewerGesture, { capture: true });
+    };
+  }, [
+    contentType,
+    startsUnmutedFromStudio,
+    videoOptions.autoplay,
+    videoOptions.playsInline,
+    videoOptions.playbackRate,
+    shouldWaitForStartGesture,
+    sceneStarted,
+    audioEnabled,
+    audioUnlockNeeded
+  ]);
+
+  const handleStartExperience = () => {
+    if (startsUnmutedFromStudio) {
+      enableViewerAudio();
+    }
+
+    setSceneStarted(true);
+  };
+
+  useEffect(() => {
+    if (!hasBootData || !sceneStarted) {
+      setTargetVisible(false);
+      targetVisibleRef.current = false;
+      return undefined;
+    }
+
+    const targetEl = targetRef.current;
+    if (!targetEl) return undefined;
+
+    const targetFoundEvent = isEightWallEngine ? "xrextrasfound" : "targetFound";
+    const targetLostEvent = isEightWallEngine ? "xrextraslost" : "targetLost";
+
+    const onTargetFound = () => {
+      targetVisibleRef.current = true;
+      setTargetVisible(true);
+    };
+
+    const onTargetLost = () => {
+      targetVisibleRef.current = false;
+      setTargetVisible(false);
+    };
+
+    targetEl.addEventListener(targetFoundEvent, onTargetFound);
+    targetEl.addEventListener(targetLostEvent, onTargetLost);
+
+    return () => {
+      targetVisibleRef.current = false;
+      setTargetVisible(false);
+      targetEl.removeEventListener(targetFoundEvent, onTargetFound);
+      targetEl.removeEventListener(targetLostEvent, onTargetLost);
+    };
+  }, [hasBootData, sceneStarted, isEightWallEngine]);
 
   useEffect(() => {
     if (!ready || !project || contentType !== "video") return;
@@ -595,7 +904,7 @@ const Viewer = () => {
       applyVideoStartTime(videoEl);
 
       if (targetVisibleRef.current) {
-        playVideo(true);
+        playVideo();
       }
     };
 
@@ -605,13 +914,14 @@ const Viewer = () => {
         applyVideoStartTime(videoEl);
       }
 
-      playVideo(true);
+      playVideo();
     };
 
     const onTargetLost = () => {
       targetVisibleRef.current = false;
-      // Always pause media audio when marker leaves camera view.
-      videoEl.pause();
+      if (videoOptions.pauseWhenTargetLost) {
+        videoEl.pause();
+      }
     };
 
     const onVideoError = () => {
@@ -657,14 +967,14 @@ const Viewer = () => {
     if (!videoEl) return;
 
     videoEl.playbackRate = videoOptions.playbackRate;
-    videoEl.muted = videoOptions.muted;
-    videoEl.defaultMuted = videoOptions.muted;
+    videoEl.muted = effectiveVideoMuted;
+    videoEl.defaultMuted = effectiveVideoMuted;
     videoEl.playsInline = videoOptions.playsInline;
 
     if (!videoOptions.autoplay) {
       videoEl.pause();
     }
-  }, [contentType, videoOptions]);
+  }, [contentType, videoOptions, effectiveVideoMuted]);
 
   useEffect(() => {
     if (!project || !ready || contentType !== "video" || !resolvedContentUrl) return;
@@ -696,9 +1006,9 @@ const Viewer = () => {
 
   useEffect(() => {
     if (!hasBootData) return;
-    if (loadingScreen.showStartButton) return;
+    if (shouldWaitForStartGesture) return;
     setSceneStarted(true);
-  }, [hasBootData, loadingScreen.showStartButton]);
+  }, [hasBootData, shouldWaitForStartGesture]);
 
   useEffect(() => {
     if (!hasBootData || !sceneStarted) return;
@@ -711,6 +1021,11 @@ const Viewer = () => {
     const startMindAR = () => {
       const system = sceneEl.systems?.["mindar-image-system"];
       if (!system || mindArStartedRef.current) return;
+      if (requiresSecureCameraOrigin()) {
+        setCameraError("Camera access on phones requires HTTPS. Use an HTTPS tunnel or deployed domain for AR preview.");
+        return;
+      }
+      setCameraError(null);
       patchMindARCameraSystem(system, trackingOptions);
       system.start();
       mindArStartedRef.current = true;
@@ -721,11 +1036,32 @@ const Viewer = () => {
       queueMindARResize();
     };
 
+    const handleCameraReady = () => {
+      setCameraError(null);
+      setArSessionReady(true);
+      queueMindARResize();
+    };
+
+    const handleCameraError = (event) => {
+      setArSessionReady(false);
+      setCameraError(
+        event?.detail?.message ||
+          "Camera could not be started. Check browser camera permission and HTTPS."
+      );
+    };
+
+    sceneEl.addEventListener("webarCameraReady", handleCameraReady);
+    sceneEl.addEventListener("webarCameraError", handleCameraError);
+    sceneEl.addEventListener("arError", handleCameraError);
+
     if (sceneEl.hasLoaded) {
       sceneEl.addEventListener("arReady", handleArReady, { once: true });
       startMindAR();
       return () => {
         sceneEl.removeEventListener("arReady", handleArReady);
+        sceneEl.removeEventListener("webarCameraReady", handleCameraReady);
+        sceneEl.removeEventListener("webarCameraError", handleCameraError);
+        sceneEl.removeEventListener("arError", handleCameraError);
       };
     }
 
@@ -738,8 +1074,51 @@ const Viewer = () => {
     return () => {
       sceneEl.removeEventListener("loaded", handleSceneLoaded);
       sceneEl.removeEventListener("arReady", handleArReady);
+      sceneEl.removeEventListener("webarCameraReady", handleCameraReady);
+      sceneEl.removeEventListener("webarCameraError", handleCameraError);
+      sceneEl.removeEventListener("arError", handleCameraError);
     };
   }, [hasBootData, sceneStarted, isMindAREngine, queueMindARResize, trackingOptions]);
+
+  useEffect(() => {
+    if (!hasBootData || !sceneStarted) return;
+    if (!isEightWallEngine) return;
+
+    const sceneEl = sceneRef.current;
+    if (!sceneEl) return;
+
+    const markReady = () => {
+      setArSessionReady(true);
+    };
+
+    if (sceneEl.hasLoaded) {
+      window.setTimeout(markReady, 250);
+      return undefined;
+    }
+
+    sceneEl.addEventListener("loaded", markReady, { once: true });
+    sceneEl.addEventListener("realityready", markReady, { once: true });
+
+    return () => {
+      sceneEl.removeEventListener("loaded", markReady);
+      sceneEl.removeEventListener("realityready", markReady);
+    };
+  }, [hasBootData, sceneStarted, isEightWallEngine]);
+
+  useEffect(() => {
+    if (!arSessionReady) {
+      setBrandSplashComplete(false);
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setBrandSplashComplete(true);
+    }, BRAND_SPLASH_DURATION_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [arSessionReady]);
 
   useEffect(() => {
     resizeMindARToViewport();
@@ -788,15 +1167,33 @@ const Viewer = () => {
         "webar-pose-smoothing": poseSmoothingConfig
       };
   const targetReady = isEightWallEngine ? eighthWallConfigured : Boolean(mindTargetSrc);
-  const showLoadingOverlay = !sceneStarted || !project || !engineRuntimeReady || !targetReady;
+  const showBrandSplash = arSessionReady && !brandSplashComplete;
+  const showCoverLoading = Boolean(resolvedLoadingBackgroundUrl) && !showBrandSplash;
+  const showLoadingOverlay =
+    !sceneStarted ||
+    !project ||
+    !engineRuntimeReady ||
+    !targetReady ||
+    !arSessionReady ||
+    !brandSplashComplete;
   const canClickStart = Boolean(
-    project && engineRuntimeReady && targetReady && loadingScreen.showStartButton
+    project &&
+      engineRuntimeReady &&
+      targetReady &&
+      !sceneStarted &&
+      shouldWaitForStartGesture
   );
+  const startButtonText = loadingScreen.startButtonText || "Play";
+  const loadingProgressPercent = Math.round(loadingProgress);
   const loadingLabel =
     !project
       ? "Fetching experience..."
       : !engineRuntimeReady
         ? "Initializing AR engine..."
+        : cameraError
+          ? "Camera setup needed"
+        : sceneStarted && !arSessionReady
+          ? "Starting camera..."
         : isEightWallEngine
           ? eighthWallTargetPreparing
             ? "Preparing 8th Wall target..."
@@ -805,9 +1202,226 @@ const Viewer = () => {
               : "Ready to start"
           : mindTargetPreparing
           ? "Preparing marker target..."
-          : mindTargetError
-            ? "Marker target unavailable"
-            : "Ready to start";
+            : mindTargetError
+              ? "Marker target unavailable"
+              : "Ready to start";
+  const loadingDetail = "";
+  const targetErrorMessage =
+    cameraError || (isEightWallEngine ? eighthWallTargetError : mindTargetError);
+  const scanInstructionText = loadingScreen.scanInstructionText;
+  const showScanOverlay = Boolean(
+    sceneStarted &&
+      arSessionReady &&
+      brandSplashComplete &&
+      !showLoadingOverlay &&
+      !targetVisible &&
+      (scanInstructionText || loadingScreen.showScanAnimation)
+  );
+  const loadingOrbitIcons =
+    contentType === "video"
+      ? ["camera", "target", "video", "audio", "spark", "phone"]
+      : ["camera", "target", "cube", "image", "spark", "phone"];
+  const loaderOnImage = showCoverLoading;
+  const loaderTextColor = loaderOnImage ? "#ffffff" : "#244543";
+  const loaderMutedColor = loaderOnImage ? "rgba(255,255,255,0.86)" : "#6e8583";
+  const loaderTrackBackground = loaderOnImage
+    ? "rgba(255, 255, 255, 0.28)"
+    : "rgba(238, 247, 246, 0.96)";
+  const loaderTrackShadow = loaderOnImage
+    ? "0 18px 42px rgba(0, 0, 0, 0.22)"
+    : "0 16px 36px rgba(8, 27, 39, 0.12)";
+  const loaderButtonStyles = loaderOnImage
+    ? {
+        border: "1px solid rgba(255,255,255,0.72)",
+        background: "rgba(255,255,255,0.94)",
+        color: "#34766e",
+        boxShadow: "0 16px 34px rgba(0,0,0,0.22)"
+      }
+    : {
+        border: "1px solid rgba(105,186,173,0.58)",
+        background: "linear-gradient(90deg, #67c8bb, #7fcfc2)",
+        color: "#ffffff",
+        boxShadow: "0 14px 30px rgba(91, 186, 174, 0.24)"
+      };
+
+  const renderLoaderIcon = (iconName) => {
+    const iconProps = {
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      "aria-hidden": "true"
+    };
+
+    switch (iconName) {
+      case "camera":
+        return (
+          <svg {...iconProps}>
+            <path d="M14.5 4h-5L8 6H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3l-1.5-2z" />
+            <circle cx="12" cy="12.5" r="3.5" />
+          </svg>
+        );
+      case "target":
+        return (
+          <svg {...iconProps}>
+            <circle cx="12" cy="12" r="8" />
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v3" />
+            <path d="M12 19v3" />
+            <path d="M2 12h3" />
+            <path d="M19 12h3" />
+          </svg>
+        );
+      case "video":
+        return (
+          <svg {...iconProps}>
+            <rect x="3" y="6" width="13" height="12" rx="2" />
+            <path d="m16 10 5-3v10l-5-3z" />
+          </svg>
+        );
+      case "audio":
+        return (
+          <svg {...iconProps}>
+            <path d="M11 5 6 9H3v6h3l5 4z" />
+            <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+            <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+          </svg>
+        );
+      case "cube":
+        return (
+          <svg {...iconProps}>
+            <path d="M21 16V8l-9-5-9 5v8l9 5z" />
+            <path d="m3.3 7.6 8.7 5 8.7-5" />
+            <path d="M12 22V12" />
+          </svg>
+        );
+      case "image":
+        return (
+          <svg {...iconProps}>
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <circle cx="8.5" cy="10" r="1.5" />
+            <path d="m21 15-4.5-4.5L9 18" />
+          </svg>
+        );
+      case "phone":
+        return (
+          <svg {...iconProps}>
+            <rect x="7" y="2" width="10" height="20" rx="2" />
+            <path d="M11 18h2" />
+          </svg>
+        );
+      default:
+        return (
+          <svg {...iconProps}>
+            <path d="M12 3v4" />
+            <path d="M12 17v4" />
+            <path d="M3 12h4" />
+            <path d="M17 12h4" />
+            <path d="m5.6 5.6 2.8 2.8" />
+            <path d="m15.6 15.6 2.8 2.8" />
+            <path d="m18.4 5.6-2.8 2.8" />
+            <path d="m8.4 15.6-2.8 2.8" />
+          </svg>
+        );
+    }
+  };
+
+  const renderLoadingExperience = () => (
+    <div
+      className="identifyng-loader-stage"
+      style={{
+        color: loaderTextColor,
+        textShadow: loaderOnImage ? "0 1px 16px rgba(0,0,0,0.48)" : "none"
+      }}
+    >
+      <div className="identifyng-loader-orbit" aria-hidden="true">
+        <IdentifyngLogo
+          alt=""
+          variant={loaderOnImage ? "light" : "dark"}
+          className="identifyng-loader-logo"
+          width={118}
+        />
+        <div className="identifyng-loader-orbit-spinner">
+          {loadingOrbitIcons.map((iconName, index) => {
+            const degree = (360 / loadingOrbitIcons.length) * index;
+            return (
+              <span
+                className="identifyng-loader-icon"
+                key={`${iconName}-${index}`}
+                style={{
+                  transform: `rotate(${degree}deg) translate(var(--loader-radius)) rotate(-${degree}deg)`
+                }}
+              >
+                <span className="identifyng-loader-icon-glyph">
+                  {renderLoaderIcon(iconName)}
+                </span>
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      <p className="identifyng-loader-label" style={{ color: loaderTextColor }}>
+        {loadingLabel}
+      </p>
+
+      <div
+        className="identifyng-loader-progress"
+        style={{
+          background: loaderTrackBackground,
+          boxShadow: loaderTrackShadow
+        }}
+        aria-label={`${loadingProgressPercent}% loaded`}
+      >
+        <div
+          className="identifyng-loader-progress-fill"
+          style={{ width: `${loadingProgressPercent}%` }}
+        />
+      </div>
+
+      <p className="identifyng-loader-percent" style={{ color: loaderMutedColor }}>
+        {loadingProgressPercent}%
+      </p>
+
+      {loadingDetail && (
+        <p style={{ margin: 0, maxWidth: 360, fontSize: 12, color: loaderMutedColor }}>
+          {loadingDetail}
+        </p>
+      )}
+
+      {targetErrorMessage && (
+        <p
+          style={{
+            margin: 0,
+            maxWidth: 360,
+            fontSize: 12,
+            color: loaderOnImage ? "#ffe3e8" : "#9f1d34",
+            padding: "8px 10px",
+            borderRadius: 999,
+            background: loaderOnImage ? "rgba(145,0,22,0.56)" : "#fff2f4",
+            border: loaderOnImage
+              ? "1px solid rgba(255,255,255,0.42)"
+              : "1px solid rgba(159,29,52,0.24)"
+          }}
+        >
+          {targetErrorMessage}
+        </p>
+      )}
+
+      {canClickStart && (
+        <button
+          type="button"
+          className="identifyng-loader-button"
+          onClick={handleStartExperience}
+          style={loaderButtonStyles}
+        >
+          {startButtonText}
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div
@@ -818,102 +1432,79 @@ const Viewer = () => {
         width: viewportSize.width ? `${viewportSize.width}px` : "100vw",
         height: viewportSize.height ? `${viewportSize.height}px` : "100dvh",
         overflow: "hidden",
-        background: "transparent",
-        backgroundImage: resolvedLoadingBackgroundUrl ? `url(${resolvedLoadingBackgroundUrl})` : undefined,
+        backgroundColor: showLoadingOverlay && !showCoverLoading ? "#ffffff" : "transparent",
+        backgroundImage:
+          showLoadingOverlay && showCoverLoading
+            ? `url(${resolvedLoadingBackgroundUrl})`
+            : undefined,
         backgroundSize: "cover",
         backgroundPosition: "center center"
       }}
     >
+      <style>{SCAN_OVERLAY_STYLES}</style>
       {showLoadingOverlay && (
         <div
           style={{
             position: "absolute",
             inset: 0,
             zIndex: 50,
-            display: "grid",
-            placeItems: "center",
-            background:
-              "radial-gradient(120% 100% at 50% 0%, rgba(0,195,255,0.14), rgba(0,0,0,0.86) 62%, #000)"
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "#ffffff",
+            backgroundImage: showCoverLoading
+              ? `linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.42)), url(${resolvedLoadingBackgroundUrl})`
+              : undefined,
+            backgroundSize: "cover",
+            backgroundPosition: "center center"
           }}
         >
-          <div style={{ width: "min(460px, 92vw)", padding: 16 }}>
-            <p style={{ margin: "0 0 10px", fontSize: 14, color: "rgba(255,255,255,0.78)" }}>
-              {loadingLabel}
-            </p>
+          {renderLoadingExperience()}
+        </div>
+      )}
+
+      {showScanOverlay && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 26,
+            pointerEvents: "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24
+          }}
+        >
+          {loadingScreen.showScanAnimation && (
+            <div className="identifyng-scan-frame" aria-hidden="true">
+              <span className="identifyng-scan-line" />
+            </div>
+          )}
+          {scanInstructionText && (
             <div
               style={{
-                width: "100%",
-                height: 12,
+                position: "fixed",
+                left: "50%",
+                bottom: "calc(env(safe-area-inset-bottom, 0px) + 84px)",
+                transform: "translateX(-50%)",
+                width: "min(340px, calc(100vw - 40px))",
+                padding: "12px 16px",
                 borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.25)",
-                background: "rgba(255,255,255,0.08)",
-                overflow: "hidden"
+                background: "rgba(5, 13, 24, 0.74)",
+                border: "1px solid rgba(255, 255, 255, 0.28)",
+                color: "#ffffff",
+                fontSize: 14,
+                fontWeight: 700,
+                lineHeight: 1.35,
+                textAlign: "center",
+                boxShadow: "0 14px 34px rgba(0, 0, 0, 0.28)",
+                backdropFilter: "blur(10px)"
               }}
             >
-              <div
-                style={{
-                  height: "100%",
-                  width: `${Math.round(loadingProgress)}%`,
-                  borderRadius: 999,
-                  background: "linear-gradient(90deg, #15b4ff, #2cf58b)",
-                  transition: "width 180ms ease"
-                }}
-              />
+              {scanInstructionText}
             </div>
-            <p style={{ margin: "8px 0 0", fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
-              {Math.round(loadingProgress)}%
-            </p>
-            {mindTargetPreparing && mindTargetCompileProgress > 0 && (
-              <p style={{ margin: "8px 0 0", fontSize: 12, color: "rgba(255,255,255,0.68)" }}>
-                Rebuilding .mind from marker image: {Math.round(mindTargetCompileProgress)}%
-              </p>
-            )}
-            {isEightWallEngine && eighthWallTargetFallbackActive && !eighthWallTargetPreparing && (
-              <p style={{ margin: "8px 0 0", fontSize: 12, color: "rgba(255,209,102,0.9)" }}>
-                Using experimental marker-derived 8th Wall target data.
-              </p>
-            )}
-            {!isEightWallEngine && mindTargetFallbackActive && !mindTargetPreparing && (
-              <p style={{ margin: "8px 0 0", fontSize: 12, color: "rgba(133,255,205,0.86)" }}>
-                Marker target regenerated automatically.
-              </p>
-            )}
-            {(mindTargetError || eighthWallTargetError) && (
-              <p
-                style={{
-                  margin: "10px 0 0",
-                  fontSize: 12,
-                  color: "#ffd5d5",
-                  padding: "8px 10px",
-                  borderRadius: 8,
-                  background: "rgba(145,0,22,0.45)",
-                  border: "1px solid rgba(255,180,180,0.45)"
-                }}
-              >
-                {isEightWallEngine ? eighthWallTargetError : mindTargetError}
-              </p>
-            )}
-            {canClickStart && (
-              <button
-                type="button"
-                onClick={() => setSceneStarted(true)}
-                style={{
-                  marginTop: 14,
-                  width: "100%",
-                  padding: "12px 16px",
-                  borderRadius: 10,
-                  border: "1px solid rgba(255,255,255,0.3)",
-                  background: "linear-gradient(90deg, rgba(21,180,255,0.92), rgba(44,245,139,0.9))",
-                  color: "#052131",
-                  fontWeight: 700,
-                  fontSize: 15,
-                  cursor: "pointer"
-                }}
-              >
-                {loadingScreen.startButtonText || "Play"}
-              </button>
-            )}
-          </div>
+          )}
         </div>
       )}
 
@@ -941,6 +1532,7 @@ const Viewer = () => {
           {...sceneEngineProps}
           vr-mode-ui="enabled: false"
           device-orientation-permission-ui="enabled: false"
+          loading-screen="enabled: false"
           renderer="alpha: true; colorManagement: true; physicallyCorrectLights: true"
           style={{
             background: "transparent",
@@ -956,7 +1548,7 @@ const Viewer = () => {
                 ref={videoRef}
                 src={resolvedContentUrl}
                 autoPlay={false}
-                muted={videoOptions.muted}
+                muted={effectiveVideoMuted}
                 loop={videoOptions.loop}
                 playsInline={videoOptions.playsInline}
                 controls={videoOptions.showControls}

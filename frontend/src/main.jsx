@@ -44,6 +44,7 @@ const Root = () => (
         }
       />
       <Route path="/v/:slug" element={<Viewer />} />
+      <Route path="/:slug/view/:projectId" element={<Viewer />} />
     </Routes>
   </BrowserRouter>
 );

@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { deleteProject, listProjects } from "../api/projects";
 import { setToken } from "../api/auth";
+import { buildViewerPath } from "../lib/viewerRoutes";
+import IdentifyngLogo from "../components/IdentifyngLogo";
 
 const normalizeUrl = (url) => {
   if (!url) return "";
@@ -57,7 +59,8 @@ const Dashboard = () => {
     <div className="dashboard-layout">
       <div className="dashboard-hero">
         <div>
-          <p className="eyebrow">WebAR Studio</p>
+          <IdentifyngLogo className="studio-logo" width={250} />
+          <p className="eyebrow">iDentifyng Studio</p>
           <h1>Your AR Projects</h1>
           <p>Create, iterate, and publish marker-based AR experiences from one workspace.</p>
         </div>
@@ -92,7 +95,7 @@ const Dashboard = () => {
                 <p>Type: {project.config?.contentType || "model"}</p>
               </div>
               <div className="project-actions">
-                <Link to={`/v/${project.slug}`} target="_blank">
+                <Link to={buildViewerPath(project)} target="_blank">
                   View
                 </Link>
                 <Link to={`/editor/${project.id}`}>Edit</Link>

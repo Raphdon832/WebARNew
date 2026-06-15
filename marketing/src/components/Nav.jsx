@@ -17,8 +17,8 @@ const Nav = () => {
     <header className={`nav ${scrolled ? "is-scrolled" : ""}`}>
       <div className="container">
         <div className="nav__inner">
-          <a href="/" aria-label="IDENTIFYNG Technologies home" style={{ display: "flex" }}>
-            <Logo width={168} />
+          <a className="nav__brand" href="/" aria-label="IDENTIFYNG Technologies home">
+            <Logo width={240} />
           </a>
 
           <nav className="nav__links" aria-label="Primary">
@@ -33,7 +33,7 @@ const Nav = () => {
             <a className="btn btn--ghost btn--sm" href={STUDIO_URL} target="_blank" rel="noreferrer">
               Studio Login
             </a>
-            <a className="btn btn--primary btn--sm" href="/#contact">
+            <a className="btn btn--primary btn--sm" href="/contact">
               Request a Consultation
             </a>
             <button
@@ -60,7 +60,7 @@ const Nav = () => {
           <a href={STUDIO_URL} target="_blank" rel="noreferrer">
             Studio Login
           </a>
-          <a className="btn btn--primary" href="/#contact" style={{ marginTop: 10 }}>
+          <a className="btn btn--primary" href="/contact" style={{ marginTop: 10 }}>
             Request a Consultation
           </a>
         </div>

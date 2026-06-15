@@ -33,7 +33,7 @@ const FeaturedSolutions = () => (
             <span className="chip">Credential Issuance</span>
             <span className="chip">Identity Assurance</span>
           </div>
-          <a className="btn btn--ghost btn--sm mt-16" href="/#identity">Learn more</a>
+          <a className="btn btn--ghost btn--sm mt-16" href="/identity">Learn more</a>
         </Reveal>
 
         <Reveal delay={160} className="card card--glow bento__sm">
@@ -46,7 +46,7 @@ const FeaturedSolutions = () => (
           </div>
           <h3 className="card__title">Software Engineering</h3>
           <p className="card__text">Enterprise-grade applications designed for performance and growth.</p>
-          <a className="btn btn--ghost btn--sm mt-16" href="/#services">Learn more</a>
+          <a className="btn btn--ghost btn--sm mt-16" href="/services">Learn more</a>
         </Reveal>
 
         <Reveal delay={240} className="card card--glow bento__sm">
@@ -60,7 +60,7 @@ const FeaturedSolutions = () => (
           </div>
           <h3 className="card__title">Government Technology</h3>
           <p className="card__text">Solutions that improve governance, transparency, and citizen engagement.</p>
-          <a className="btn btn--ghost btn--sm mt-16" href="/#government">Learn more</a>
+          <a className="btn btn--ghost btn--sm mt-16" href="/government">Learn more</a>
         </Reveal>
 
         <Reveal delay={320} className="card card--glow bento__sm">
@@ -73,7 +73,7 @@ const FeaturedSolutions = () => (
           </div>
           <h3 className="card__title">Augmented Reality Media</h3>
           <p className="card__text">Interactive digital experiences that bridge physical and digital environments.</p>
-          <a className="btn btn--ghost btn--sm mt-16" href="/#ar-media">Learn more</a>
+          <a className="btn btn--ghost btn--sm mt-16" href="/ar-media">Learn more</a>
         </Reveal>
 
         <Reveal delay={400} className="card card--glow bento__sm">
@@ -86,7 +86,7 @@ const FeaturedSolutions = () => (
           </div>
           <h3 className="card__title">Web and Digital Platforms</h3>
           <p className="card__text">Modern websites and digital ecosystems that drive engagement.</p>
-          <a className="btn btn--ghost btn--sm mt-16" href="/#services">Learn more</a>
+          <a className="btn btn--ghost btn--sm mt-16" href="/services">Learn more</a>
         </Reveal>
       </div>
     </div>

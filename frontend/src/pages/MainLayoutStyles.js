@@ -64,6 +64,10 @@ const styles = `
     font-size: 30px;
   }
 
+  .auth-logo {
+    margin: 0 auto 26px;
+  }
+
   .auth-card p {
     margin: 0 0 24px;
     color: var(--text-soft);
@@ -153,6 +157,10 @@ const styles = `
     gap: 16px;
     margin-bottom: 28px;
     flex-wrap: wrap;
+  }
+
+  .studio-logo {
+    margin-bottom: 14px;
   }
 
   .dashboard-hero h1,

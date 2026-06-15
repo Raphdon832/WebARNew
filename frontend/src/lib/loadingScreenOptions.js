@@ -7,10 +7,17 @@ const sanitizeText = (value, fallback, maxLength = 64) => {
   return trimmed.slice(0, maxLength);
 };
 
+const sanitizeOptionalText = (value, maxLength = 64) => {
+  if (typeof value !== "string") return "";
+  return value.trim().slice(0, maxLength);
+};
+
 export const createDefaultLoadingScreenOptions = () => ({
   backgroundImageUrl: "",
   showStartButton: false,
-  startButtonText: "Play"
+  startButtonText: "Play",
+  scanInstructionText: "",
+  showScanAnimation: false
 });
 
 export const toInputLoadingScreenOptions = (rawOptions = {}) => {
@@ -23,7 +30,11 @@ export const toInputLoadingScreenOptions = (rawOptions = {}) => {
     showStartButton: isBoolean(rawOptions.showStartButton)
       ? rawOptions.showStartButton
       : defaults.showStartButton,
-    startButtonText: sanitizeText(rawOptions.startButtonText, defaults.startButtonText)
+    startButtonText: sanitizeText(rawOptions.startButtonText, defaults.startButtonText),
+    scanInstructionText: sanitizeOptionalText(rawOptions.scanInstructionText, 96),
+    showScanAnimation: isBoolean(rawOptions.showScanAnimation)
+      ? rawOptions.showScanAnimation
+      : defaults.showScanAnimation
   };
 };
 
@@ -33,6 +44,8 @@ export const normalizeLoadingScreenOptions = (rawOptions = {}) => {
   return {
     backgroundImageUrl: input.backgroundImageUrl,
     showStartButton: Boolean(input.showStartButton),
-    startButtonText: sanitizeText(input.startButtonText, "Play")
+    startButtonText: sanitizeText(input.startButtonText, "Play"),
+    scanInstructionText: sanitizeOptionalText(input.scanInstructionText, 96),
+    showScanAnimation: Boolean(input.showScanAnimation)
   };
 };

@@ -13,23 +13,41 @@ deployment plan.
 
 ## 1. Design direction
 
-**Reference theme:** [Sapforce – AI SaaS website design by Phenomenon Studio](https://dribbble.com/shots/21107524-Sapforce-AI-SaaS-website-design)
-(also: [Web design variant](https://dribbble.com/shots/24043906-Sapforce-AI-SaaS-Website-Web-Design)).
+**Reference theme:** Sapforce AI SaaS website design by Phenomenon Studio on Dribbble
+(`https://dribbble.com/shots/21107524-Sapforce-AI-SaaS-website-design`). The redesign should use
+that project's premium AI-SaaS visual language as a direction, not a pixel-for-pixel clone, while
+preserving IDENTIFYNG Technologies' core marketing information, Nigerian corporate identity, and
+teal brand system.
 
-What we take from the reference (the "Sapforce DNA"):
+What we adopt from the Sapforce-inspired direction:
 
-- **Premium dark theme** — near-black deep-navy canvas, generous negative space.
-- **Glowing aurora / orb gradients** behind the hero and section transitions.
-- **3D glossy abstract motifs** evoking the "AI cyclic improvement" philosophy → we use an
-  **orbital / ring motif** (concentric animated rings, particles) instead of heavy 3D renders.
-- **Glassmorphism cards** — translucent surfaces, 1px luminous borders, soft shadows, hover lift.
-- **Bento-grid feature layouts** with varied tile sizes.
-- **Large, tight display typography** paired with a clean grotesk/sans body.
-- **Pill navigation bar** (sticky, glass) and **gradient pill CTA buttons**.
-- **Minimal, tasteful motion** — scroll-reveal fade-ups, gentle hover transitions, slow glow drift.
+- **Bright AI-SaaS canvas:** mostly white and pale silver with a soft grey top band, subtle grid
+  texture, and very restrained ambient glow.
+- **Compact pill navigation:** centered, airy header with a clear brand area, simple text links,
+  a secondary login button, and one strong rounded CTA.
+- **Oversized hero typography:** confident, tight display headline with a large first-viewport
+  presence. The headline remains "Transforming Ideas into Intelligent Digital Experiences".
+- **Futuristic 3D centerpiece:** replace the old orbit-only illustration with a glossy abstract AI
+  object: metallic/silver shell, teal-lime translucent energy core, thin orbital rings, and floating
+  micro labels. This gives the brand a technology-forward first impression similar to the reference.
+- **Sparse hero metadata:** keep only high-signal facts around the object, such as RC number,
+  Abuja headquarters, Government & Enterprise, Digital Identity, and AR Media.
+- **Lime/teal action accent:** primary action uses the brand teal/blue gradient; one circular lime
+  "How it works" style CTA appears near the hero visual.
+- **Modular lower sections:** sections should feel like a SaaS case-study landing page: generous
+  spacing, hairline borders, rounded cards, bento layouts, and large section headlines. The content
+  remains IDENTIFYNG's services, AR media, government technology, identity management, industries,
+  insights, careers, CSR, and contact information.
+- **Minimal motion:** gentle reveal, slow hero object float, slow orbital rotation, hover lift on
+  cards/buttons, and full `prefers-reduced-motion` support.
 
-The reference's cool green/cyan accent aligns with the existing **iDentifyng brand** (teal/mint
-`#7fcfc2`), so the site honors the reference while staying brand-consistent with the Studio app.
+Design guardrails:
+
+- Use the real IDENTIFYNG logo assets from `/logos`.
+- Keep the site light, crisp, and editorial rather than dark, glassy, or dashboard-heavy.
+- Do not add fake product claims. Metrics are framed as capability labels unless verified.
+- Do not remove the core corporate information, RC number, Abuja address, service categories,
+  sector focus, or contact content.
 
 ---
 
@@ -40,37 +58,60 @@ Implemented as CSS custom properties in `marketing/src/styles/global.css`.
 ### Color
 | Token | Value | Use |
 |---|---|---|
-| `--bg` | `#070A14` | Page canvas (near-black navy) |
-| `--bg-2` | `#0B1021` | Brand navy (matches Studio app) |
-| `--surface` | `rgba(255,255,255,0.035)` | Glass card fill |
-| `--surface-2` | `rgba(255,255,255,0.06)` | Elevated glass |
-| `--border` | `rgba(255,255,255,0.08)` | Hairline borders |
-| `--border-glow` | `rgba(127,231,214,0.28)` | Accent borders / focus |
-| `--accent` | `#7FE7D6` | Primary mint accent (brightened brand teal) |
-| `--accent-brand` | `#7FCFC2` | Exact brand teal (logo) |
-| `--accent-blue` | `#6FA8FF` | Secondary electric blue (gradient pair) |
-| `--accent-lime` | `#C6F24E` | Sparing lime highlight (Sapforce nod) |
-| `--text` | `#EAF1F5` | Primary text |
-| `--text-muted` | `#9DB0BC` | Body / secondary |
-| `--text-faint` | `#6B7A87` | Captions / labels |
+| `--bg` | `#F5F7F3` | Warm light page canvas |
+| `--bg-top` | `#C9CACA` | Soft grey top band inspired by the reference shot |
+| `--paper` | `#FFFFFF` | Main content field |
+| `--surface` | `rgba(255,255,255,0.86)` | Pills, cards, floating labels |
+| `--surface-strong` | `#FFFFFF` | Solid elevated surfaces |
+| `--border` | `rgba(13,30,38,0.11)` | Hairline borders |
+| `--border-strong` | `rgba(13,30,38,0.18)` | Stronger card/nav borders |
+| `--accent` | `#2F9F93` | Primary teal |
+| `--accent-brand` | `#7FCFC2` | Exact IDENTIFYNG logo teal |
+| `--accent-blue` | `#3F7DD8` | Blue side of gradient |
+| `--accent-lime` | `#C8FF38` | Sapforce-like lime micro CTA |
+| `--text` | `#0E222B` | Primary text |
+| `--text-muted` | `#526674` | Body / secondary |
+| `--text-faint` | `#7B8991` | Captions / labels |
 
-Signature gradient: `linear-gradient(135deg, #7FE7D6 0%, #6FA8FF 100%)`.
-Glow orbs: radial teal / blue / faint violet, heavily blurred, low opacity.
+Signature gradients:
+
+- Primary CTA: `linear-gradient(135deg, #2F9F93 0%, #3F7DD8 100%)`.
+- Lime CTA: `#C8FF38` with dark text.
+- Hero headline accent: gradient from teal to blue, used only on the phrase
+  "Intelligent Digital Experiences".
+
+Backgrounds:
+
+- Top grey band behind the header.
+- White hero field below with a very subtle grid.
+- Low-opacity radial teal/blue washes, no decorative blobs.
 
 ### Typography
-- **Display / headings:** `Space Grotesk` (700/800) — same family as the logo wordmark.
+- **Display / headings:** `Space Grotesk` (700/800) - same family as the logo wordmark.
 - **Body / UI:** `Inter` (400/500/600).
-- Hero scale uses `clamp()` for fluid responsiveness; headings use tight letter-spacing (-0.02em).
+- Hero scale uses `clamp()` for fluid responsiveness; headings use neutral letter-spacing.
 
 ### Shape & depth
-- Radii: cards `20px`, buttons/pills `999px`, small chips `12px`.
-- Shadows: soft, low-opacity, large-blur; accent glow on hover.
-- Max content width: `1200px`; section vertical rhythm `clamp(80px, 10vw, 140px)`.
+- Radii: cards `8px`, panels `12px`, pills/buttons `999px`.
+- Shadows: almost invisible on static surfaces; stronger only for the hero 3D image and floating
+  labels.
+- Max content width: `1360px` for the nav and hero, `1200px` for content sections.
+- Section vertical rhythm: `clamp(74px, 9vw, 128px)`.
+
+### Hero composition
+- Header: centered, max width `1360px`, logo visible at approximately `240px`, nav links in compact
+  pills, Studio Login as secondary pill, Request a Consultation as primary pill.
+- Hero grid: left content column + right visual column.
+- Left: badge pill, huge headline, paragraph, CTA row, three compact proof labels.
+- Right: generated 3D abstract AI object image with floating feature labels and a circular lime
+  "How it works?" CTA.
+- Use the real logo in nav/footer and the icon mark in the 3D visual center only when it improves
+  brand recognition.
 
 ### Motion
 - Scroll-reveal fade-up via `IntersectionObserver` (`Reveal` component).
-- Hover lift + border-glow on cards/buttons.
-- Slow drifting hero glow (CSS keyframes), animated orbital rings, `prefers-reduced-motion` respected.
+- Hero object slow float, orbital ring slow rotate, and hover lift on cards/buttons.
+- Motion must pause/reduce under `prefers-reduced-motion`.
 
 ---
 
@@ -87,6 +128,23 @@ Glow orbs: radial teal / blue / faint violet, heavily blurred, low opacity.
 - **Components:** shared `Logo`, `Nav`, `Footer`, `GlowField`, `Reveal`, plus one component
   per content section under `src/sections/`.
 - **Assets:** brand logo reused from the Studio app (`IdentifyngLogo`).
+
+### Current routed structure
+
+- `/` - overview landing with hero, company overview, impact, featured solutions, why us, clients,
+  and contact.
+- `/company` - about, impact, portfolio, clients, careers, and CSR.
+- `/services` - featured solutions and end-to-end service capabilities.
+- `/ar-media` - AR Media workflow, applications, and benefits.
+- `/government` - public-sector platform capabilities.
+- `/identity` - digital identity lifecycle and trust systems.
+- `/industries` - served sectors, portfolio, and client focus.
+- `/insights` - thought-leadership/resource categories.
+- `/contact` - contact details and Netlify form.
+- `/privacy` and `/terms` - legal pages.
+
+Generated visual assets now live in `marketing/public/images`; the hero object uses a
+transparent-background PNG.
 
 ---
 
@@ -245,6 +303,9 @@ Create a **new, separate Netlify site** for the marketing website (do not reuse 
 - **Build command:** `npm ci && npm run build`
 - **Publish directory:** `marketing/dist`
 - **Domains:** `identifyng.com` (primary) + `www.identifyng.com` (redirect/alias)
+- **Netlify site:** `identifyng-marketing` (`https://identifyng-marketing.netlify.app`)
+- **Netlify site ID:** `2c3eb81b-f9e7-4ff3-99de-0693cbadefe8`
+- **Latest production deploy:** `6a2e4b79a01a85c210d2e311`
 - SPA redirect (`/* → /index.html 200`) is included in `marketing/netlify.toml`.
 
 DNS (WhoGoHost): point apex `identifyng.com` and `www` to the new marketing Netlify site
@@ -257,10 +318,14 @@ DNS (WhoGoHost): point apex `identifyng.com` and `www` to the new marketing Netl
 - [x] Spec documented (this file).
 - [x] Project scaffolded (`marketing/` — React 18 + Vite 5 + React Router 6).
 - [x] Design system + foundation built (`src/styles/global.css`, `Logo`, `Nav`, `Footer`, `Reveal`, `Hero`).
+- [x] Marketing theme switched to a clean light brand system.
 - [x] All 17 content sections built (Hero + 16 sections) in `src/sections/`, plus `Privacy` / `Terms` routes.
 - [x] Contact form wired for Netlify Forms (hidden detection form in `index.html`).
 - [x] Production build verified (`npm run build` → clean; preview serves HTTP 200).
-- [ ] New Netlify site created + domains attached (`identifyng.com` + `www.identifyng.com`).
+- [x] New Netlify site created + domains attached (`identifyng.com` + `www.identifyng.com`).
+- [x] Marketing site deployed to Netlify production (`https://identifyng-marketing.netlify.app`).
+- [x] WhoGoHost DNS updated for `identifyng.com` apex and `www`.
+- [ ] Netlify HTTPS/TLS provisioned for `identifyng.com` + `www.identifyng.com`.
 
 ### Build / run commands
 

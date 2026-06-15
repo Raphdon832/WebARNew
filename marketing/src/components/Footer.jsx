@@ -9,7 +9,7 @@ const Footer = () => (
     <div className="container">
       <div className="footer__grid">
         <div className="footer__col">
-          <Logo width={196} />
+          <Logo width={225} />
           <p className="muted" style={{ marginTop: 20, maxWidth: "34ch", fontSize: 15 }}>
             A fully indigenous Nigerian technology and innovation company building secure, scalable,
             and intelligent digital solutions for governments, businesses, and institutions.
@@ -19,20 +19,20 @@ const Footer = () => (
 
         <div className="footer__col">
           <h4>Solutions</h4>
-          <a href="/#identity">Digital Identity</a>
-          <a href="/#services">Software Engineering</a>
-          <a href="/#government">Government Technology</a>
-          <a href="/#ar-media">AR Media</a>
-          <a href="/#services">Web &amp; Digital Platforms</a>
+          <Link to="/identity">Digital Identity</Link>
+          <Link to="/services">Software Engineering</Link>
+          <Link to="/government">Government Technology</Link>
+          <Link to="/ar-media">AR Media</Link>
+          <Link to="/services">Web &amp; Digital Platforms</Link>
         </div>
 
         <div className="footer__col">
           <h4>Company</h4>
-          <a href="/#about">About Us</a>
-          <a href="/#industries">Industries</a>
-          <a href="/#insights">Insights</a>
-          <a href="/#careers">Careers</a>
-          <a href="/#contact">Contact</a>
+          <Link to="/company">About Us</Link>
+          <Link to="/industries">Industries</Link>
+          <Link to="/insights">Insights</Link>
+          <Link to="/company#careers">Careers</Link>
+          <Link to="/contact">Contact</Link>
         </div>
 
         <div className="footer__col">

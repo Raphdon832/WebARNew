@@ -83,6 +83,10 @@ export const patchMindARCameraSystem = (system, trackingOptions = {}) => {
     this.container.appendChild(this.video);
 
     if (!navigator.mediaDevices?.getUserMedia) {
+      const errorMessage = window.isSecureContext
+        ? "Camera access is not available in this browser."
+        : "Camera access requires HTTPS on mobile devices.";
+      this.el.emit("webarCameraError", { error: "VIDEO_FAIL", message: errorMessage });
       this.el.emit("arError", { error: "VIDEO_FAIL" });
       this.ui.showCompatibility();
       return;
@@ -103,6 +107,11 @@ export const patchMindARCameraSystem = (system, trackingOptions = {}) => {
             () => {
               this.video.setAttribute("width", this.video.videoWidth);
               this.video.setAttribute("height", this.video.videoHeight);
+              this.el.emit("webarCameraReady", {
+                settings: this.__webarCameraSettings,
+                width: this.video.videoWidth,
+                height: this.video.videoHeight
+              });
               this._startAR();
             },
             { once: true }
@@ -117,6 +126,10 @@ export const patchMindARCameraSystem = (system, trackingOptions = {}) => {
       }
 
       console.log("getUserMedia error", lastError);
+      this.el.emit("webarCameraError", {
+        error: "VIDEO_FAIL",
+        message: lastError?.message || "Camera could not be started."
+      });
       this.el.emit("arError", { error: "VIDEO_FAIL" });
     };
 

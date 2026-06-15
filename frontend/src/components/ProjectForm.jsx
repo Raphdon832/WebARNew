@@ -681,6 +681,31 @@ const ProjectForm = ({
             onChange={(value) => onLoadingScreenChange("startButtonText", value)}
           />
         )}
+
+        <AssetUploader
+          label="Camera Instruction Text"
+          placeholder="Point the camera to the image"
+          value={loadingScreen.scanInstructionText || ""}
+          onChange={(value) => onLoadingScreenChange("scanInstructionText", value)}
+        />
+
+        <label
+          style={{
+            fontSize: 13,
+            color: "rgba(255,255,255,0.85)",
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            marginTop: 12
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={Boolean(loadingScreen.showScanAnimation)}
+            onChange={(e) => onLoadingScreenChange("showScanAnimation", e.target.checked)}
+          />
+          Show scan animation over camera
+        </label>
       </div>
 
       <AssetUploader

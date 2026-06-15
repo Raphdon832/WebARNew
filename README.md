@@ -1,6 +1,6 @@
-# WebAR Platform MVP
+# iDentifyng MVP
 
-A starter full-stack WebAR builder inspired by tools like MyWebAR. Creators can log in, create AR projects by pasting marker/model URLs, and share viewer links that run in the browser using A-Frame + mind-ar.
+iDentifyng is a starter full-stack AR builder. Creators can log in, create AR projects by pasting marker/model URLs, and share viewer links that run in the browser using A-Frame + mind-ar.
 
 ## Architecture Overview
 
@@ -80,6 +80,14 @@ Set this environment variable in Netlify site settings:
 | key | description |
 | --- | --- |
 | `VITE_API_URL` | public backend API base URL (for example `https://your-api.example.com/api`) |
+| `VITE_STUDIO_ORIGIN` | public Studio origin used for viewer links and QR codes (`https://studio.identifyng.com`) |
+
+Custom domain setup:
+
+1. In Netlify, add `studio.identifyng.com` as the custom domain for the frontend site.
+2. At the DNS provider for `identifyng.com`, create a `CNAME` record for `studio` that points to the Netlify site hostname.
+3. After DNS verifies in Netlify, enable or renew the Netlify TLS certificate for HTTPS.
+4. Viewer links use `https://studio.identifyng.com/{project-slug}/view/{project-id}`. The legacy `/v/{project-slug}` route remains available for older links.
 
 ## Railway Deploy (Backend)
 
@@ -101,7 +109,7 @@ For file uploads, attach a Railway volume and mount it at the same `UPLOADS_DIR`
 1. Register → Login.
 2. Visit Dashboard → "New Project".
 3. Upload marker image + matching `.mind` target file, then upload either a GLB/GLTF model or a video file.
-4. Save & Publish → share `/v/:slug` link.
+4. Save & Publish, then share the `/{project-slug}/view/{project-id}` viewer link.
 
 ## Extending toward production
 - Multiple assets & drag-and-drop canvas (Three.js overlay).

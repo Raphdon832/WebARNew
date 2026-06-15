@@ -28,8 +28,8 @@ const CompanyOverview = () => (
             </div>
 
             <div className="btn-row mt-24">
-              <a className="btn btn--primary" href="/#solutions">Explore Our Solutions</a>
-              <a className="btn btn--ghost" href="/#contact">Partner With Us</a>
+              <a className="btn btn--primary" href="/services">Explore Our Solutions</a>
+              <a className="btn btn--ghost" href="/contact">Partner With Us</a>
             </div>
           </div>
         </Reveal>

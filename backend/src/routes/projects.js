@@ -129,6 +129,22 @@ router.get("/slug/:slug", async (req, res) => {
   }
 });
 
+router.get("/public/:id/:slug", async (req, res) => {
+  try {
+    const project = await findProjectById(req.params.id);
+    if (!project || project.slug !== req.params.slug) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    await incrementProjectView(project.id);
+    const updatedProject = await findProjectById(req.params.id);
+    res.json(normalizeProjectForClient(updatedProject || project, req));
+  } catch (err) {
+    console.error("Fetch public project error", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 router.get("/:id", authRequired, async (req, res) => {
   try {
     const project = await findProjectById(req.params.id);

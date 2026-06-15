@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { login, setToken } from "../api/auth";
+import IdentifyngLogo from "../components/IdentifyngLogo";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -23,6 +24,7 @@ const Login = () => {
   return (
     <div className="auth-layout">
       <form className="auth-card" onSubmit={handleSubmit}>
+        <IdentifyngLogo className="auth-logo" width={230} />
         <h1>Welcome back</h1>
         <p>Sign in to continue building AR content.</p>
         {error && <div className="auth-error">{error}</div>}

@@ -33,7 +33,7 @@ const Government = () => (
             </ul>
 
             <div className="btn-row mt-32">
-              <a className="btn btn--primary btn--lg" href="/#contact">Request a Consultation</a>
+              <a className="btn btn--primary btn--lg" href="/contact">Request a Consultation</a>
             </div>
           </div>
         </Reveal>

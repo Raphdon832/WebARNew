@@ -14,14 +14,14 @@ export const COMPANY = {
   website: "www.identifyng.com",
 };
 
-// Primary anchor nav (single-page scroll). Paths use /#id so they work from any route.
+// Primary navigation. Detailed content lives on dedicated routes.
 export const NAV_LINKS = [
-  { label: "About", href: "/#about" },
-  { label: "Services", href: "/#services" },
-  { label: "AR Media", href: "/#ar-media" },
-  { label: "Government", href: "/#government" },
-  { label: "Identity", href: "/#identity" },
-  { label: "Industries", href: "/#industries" },
-  { label: "Insights", href: "/#insights" },
-  { label: "Contact", href: "/#contact" },
+  { label: "Company", href: "/company" },
+  { label: "Services", href: "/services" },
+  { label: "AR Media", href: "/ar-media" },
+  { label: "Government", href: "/government" },
+  { label: "Identity", href: "/identity" },
+  { label: "Industries", href: "/industries" },
+  { label: "Insights", href: "/insights" },
+  { label: "Contact", href: "/contact" },
 ];

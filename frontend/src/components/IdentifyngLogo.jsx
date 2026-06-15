@@ -1,20 +1,20 @@
 import React from "react";
 
 const LOGO_SRC = {
-  dark: "/logos/IDentifyNG_02.svg",
   light: "/logos/IDentifyNG_01.svg",
+  dark: "/logos/IDentifyNG_02.svg",
   mark: "/logos/IDentifyNG_03.svg"
 };
 
-const Logo = ({
-  alt = "IDENTIFYNG Technologies",
+const IdentifyngLogo = ({
+  alt = "iDentifyng",
   className = "",
   style,
-  variant = "dark",
-  width = 184
+  variant = "light",
+  width = 360
 }) => (
   <img
-    src={LOGO_SRC[variant] || LOGO_SRC.dark}
+    src={LOGO_SRC[variant] || LOGO_SRC.light}
     alt={alt}
     className={className}
     style={{
@@ -27,4 +27,4 @@ const Logo = ({
   />
 );
 
-export default Logo;
+export default IdentifyngLogo;

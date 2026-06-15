@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { register, setToken } from "../api/auth";
+import IdentifyngLogo from "../components/IdentifyngLogo";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -23,8 +24,9 @@ const Register = () => {
   return (
     <div className="auth-layout">
       <form className="auth-card" onSubmit={handleSubmit}>
+        <IdentifyngLogo className="auth-logo" width={230} />
         <h1>Create account</h1>
-        <p>Launch your own WebAR projects in minutes.</p>
+        <p>Launch your own iDentifyng projects in minutes.</p>
         {error && <div className="auth-error">{error}</div>}
         <input
           type="email"

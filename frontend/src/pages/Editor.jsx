@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import EditorCanvas from "../components/EditorCanvas";
 import ProjectForm from "../components/ProjectForm";
 import ViewerQRCode from "../components/ViewerQRCode";
+import IdentifyngLogo from "../components/IdentifyngLogo";
 import { createProject, fetchProjectById, updateProject } from "../api/projects";
 import {
   generateEighthWallTarget,
@@ -26,6 +27,7 @@ import {
   normalizeTrackingOptions,
   toInputTrackingOptions
 } from "../lib/trackingOptions";
+import { buildViewerUrl } from "../lib/viewerRoutes";
 import {
   compileMindFileFromImageFile,
   compileMindFileFromImageUrl
@@ -82,6 +84,7 @@ const Editor = () => {
   const [videoOptions, setVideoOptions] = useState(createDefaultVideoOptions());
   const [loadingScreen, setLoadingScreen] = useState(createDefaultLoadingScreenOptions());
   const [trackingOptions, setTrackingOptions] = useState(createDefaultTrackingOptions());
+  const [projectId, setProjectId] = useState(isEditing ? id : null);
   const [projectSlug, setProjectSlug] = useState(null);
   const [saving, setSaving] = useState(false);
   const [loadingProject, setLoadingProject] = useState(Boolean(isEditing));
@@ -123,6 +126,7 @@ const Editor = () => {
         setLoadingScreen(toInputLoadingScreenOptions(config.loadingScreen));
         setTrackingOptions(toInputTrackingOptions(config.trackingOptions));
         setMarkerQuality(null);
+        setProjectId(project.id || id);
         setProjectSlug(project.slug || null);
       })
       .catch((err) => {
@@ -453,6 +457,7 @@ const Editor = () => {
       const project = isEditing ? await updateProject(id, payload) : await createProject(payload);
 
       setProjectSlug(project.slug);
+      setProjectId(project.id);
       setSuccess(isEditing ? "Project updated successfully." : "Project published successfully.");
 
       if (!isEditing) {
@@ -473,12 +478,13 @@ const Editor = () => {
     );
   }
 
-  const viewerUrl = projectSlug ? `${window.location.origin}/v/${projectSlug}` : "";
+  const viewerUrl = buildViewerUrl({ id: projectId, slug: projectSlug });
 
   return (
     <div className="editor-layout">
       <div className="editor-hero">
         <div>
+          <IdentifyngLogo className="studio-logo" width={250} />
           <h1>{pageTitle}</h1>
           <p>Build interactive marker-based AR scenes with precise placement controls.</p>
         </div>
