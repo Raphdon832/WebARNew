@@ -87,8 +87,8 @@ Backgrounds:
 - Low-opacity radial teal/blue washes, no decorative blobs.
 
 ### Typography
-- **Display / headings:** `Space Grotesk` (700/800) - same family as the logo wordmark.
-- **Body / UI:** `Inter` (400/500/600).
+- **Display / headings:** `Poppins` (600/700/800).
+- **Body / UI:** `Poppins` (400/500/600).
 - Hero scale uses `clamp()` for fluid responsiveness; headings use neutral letter-spacing.
 
 ### Shape & depth
@@ -305,7 +305,7 @@ Create a **new, separate Netlify site** for the marketing website (do not reuse 
 - **Domains:** `identifyng.com` (primary) + `www.identifyng.com` (redirect/alias)
 - **Netlify site:** `identifyng-marketing` (`https://identifyng-marketing.netlify.app`)
 - **Netlify site ID:** `2c3eb81b-f9e7-4ff3-99de-0693cbadefe8`
-- **Latest production deploy:** `6a2e4b79a01a85c210d2e311`
+- **Latest production deploy:** `6a3177578a46746e77cb22e6`
 - SPA redirect (`/* → /index.html 200`) is included in `marketing/netlify.toml`.
 
 DNS (WhoGoHost): point apex `identifyng.com` and `www` to the new marketing Netlify site

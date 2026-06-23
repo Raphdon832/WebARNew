@@ -6,7 +6,7 @@ const Hero = () => (
     <div className="container">
       <div className="hero__grid">
         <div className="hero__copy">
-          <Reveal>
+          <Reveal className="hero__badge-wrap">
             <span className="hero__badge">
               <b>Innovation</b>
               <span className="hero__badge-text">
@@ -65,6 +65,23 @@ const Hero = () => (
             />
             <span className="hero-object__ring hero-object__ring--one" />
             <span className="hero-object__ring hero-object__ring--two" />
+            <span className="hero-object__ring hero-object__ring--three" />
+            <span className="hero-object__ring hero-object__ring--four" />
+            <span className="hero-object__orbit hero-object__orbit--one" aria-hidden="true">
+              <span className="hero-object__node hero-object__node--teal" />
+            </span>
+            <span className="hero-object__orbit hero-object__orbit--two" aria-hidden="true">
+              <span className="hero-object__node hero-object__node--blue" />
+            </span>
+            <span className="hero-object__orbit hero-object__orbit--three" aria-hidden="true">
+              <span className="hero-object__node hero-object__node--lime" />
+            </span>
+            <span className="hero-object__orbit hero-object__orbit--four" aria-hidden="true">
+              <span className="hero-object__node hero-object__node--white" />
+            </span>
+            <span className="hero-object__orbit hero-object__orbit--five" aria-hidden="true">
+              <span className="hero-object__node hero-object__node--teal hero-object__node--sm" />
+            </span>
             <div className="hero-object__label hero-object__label--top">
               <span />
               Digital Identity
