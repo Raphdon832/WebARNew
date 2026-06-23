@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import "./lib/firebase.js";
 import authRoutes from "./routes/auth.js";
+import analyticsRoutes from "./routes/analytics.js";
 import projectRoutes from "./routes/projects.js";
 import uploadRoutes from "./routes/uploads.js";
 import { uploadsRootDir } from "./lib/uploads.js";
@@ -19,6 +20,7 @@ app.get("/health", (_req, res) => {
 
 app.use("/uploads", express.static(uploadsRootDir));
 app.use("/api/auth", authRoutes);
+app.use("/api/analytics", analyticsRoutes);
 app.use("/api/projects", projectRoutes);
 app.use("/api/uploads", uploadRoutes);
 
