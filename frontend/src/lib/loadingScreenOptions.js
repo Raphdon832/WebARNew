@@ -12,10 +12,17 @@ const sanitizeOptionalText = (value, maxLength = 64) => {
   return value.trim().slice(0, maxLength);
 };
 
+const DEFAULT_START_BUTTON_TEXT = "Launch";
+
+const sanitizeStartButtonText = (value, fallback = DEFAULT_START_BUTTON_TEXT) => {
+  const text = sanitizeText(value, fallback);
+  return text.toLowerCase() === "play" ? DEFAULT_START_BUTTON_TEXT : text;
+};
+
 export const createDefaultLoadingScreenOptions = () => ({
   backgroundImageUrl: "",
   showStartButton: false,
-  startButtonText: "Play",
+  startButtonText: DEFAULT_START_BUTTON_TEXT,
   scanInstructionText: "",
   showScanAnimation: false
 });
@@ -30,7 +37,7 @@ export const toInputLoadingScreenOptions = (rawOptions = {}) => {
     showStartButton: isBoolean(rawOptions.showStartButton)
       ? rawOptions.showStartButton
       : defaults.showStartButton,
-    startButtonText: sanitizeText(rawOptions.startButtonText, defaults.startButtonText),
+    startButtonText: sanitizeStartButtonText(rawOptions.startButtonText, defaults.startButtonText),
     scanInstructionText: sanitizeOptionalText(rawOptions.scanInstructionText, 96),
     showScanAnimation: isBoolean(rawOptions.showScanAnimation)
       ? rawOptions.showScanAnimation
@@ -44,7 +51,7 @@ export const normalizeLoadingScreenOptions = (rawOptions = {}) => {
   return {
     backgroundImageUrl: input.backgroundImageUrl,
     showStartButton: Boolean(input.showStartButton),
-    startButtonText: sanitizeText(input.startButtonText, "Play"),
+    startButtonText: sanitizeStartButtonText(input.startButtonText),
     scanInstructionText: sanitizeOptionalText(input.scanInstructionText, 96),
     showScanAnimation: Boolean(input.showScanAnimation)
   };

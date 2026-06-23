@@ -434,6 +434,11 @@ const Editor = () => {
     const normalizedVideoOptions = normalizeVideoOptions(videoOptions);
     const normalizedLoadingScreen = normalizeLoadingScreenOptions(loadingScreen);
 
+    if (contentType === "video" && normalizedVideoOptions.ctaEnabled && !normalizedVideoOptions.ctaUrl) {
+      setError("Enter a valid HTTP or HTTPS CTA link before publishing.");
+      return;
+    }
+
     setSaving(true);
     setError(null);
     setSuccess(null);

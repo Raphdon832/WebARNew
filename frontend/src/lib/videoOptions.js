@@ -7,6 +7,29 @@ const parseNumber = (value, fallback) => {
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
+const clampInteger = (value, min, max) =>
+  Math.min(max, Math.max(min, Math.round(value)));
+
+const normalizeCtaUrl = (value = "") => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+
+  const candidate = /^[a-z][a-z\d+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return "";
+    return url.href;
+  } catch (_err) {
+    return "";
+  }
+};
+
+const normalizeCtaLabel = (value = "") => {
+  const trimmed = String(value || "").trim();
+  return trimmed || "Learn More";
+};
+
 export const createDefaultVideoOptions = () => ({
   autoplay: true,
   loop: true,
@@ -22,7 +45,11 @@ export const createDefaultVideoOptions = () => ({
   opacity: "1",
   startTimeSec: "0",
   pauseWhenTargetLost: true,
-  restartOnTargetFound: false
+  restartOnTargetFound: false,
+  ctaEnabled: false,
+  ctaLabel: "Learn More",
+  ctaUrl: "",
+  ctaShowAfterPlays: "1"
 });
 
 export const toInputVideoOptions = (rawOptions = {}) => {
@@ -56,7 +83,11 @@ export const toInputVideoOptions = (rawOptions = {}) => {
       : defaults.pauseWhenTargetLost,
     restartOnTargetFound: isBoolean(rawOptions.restartOnTargetFound)
       ? rawOptions.restartOnTargetFound
-      : defaults.restartOnTargetFound
+      : defaults.restartOnTargetFound,
+    ctaEnabled: isBoolean(rawOptions.ctaEnabled) ? rawOptions.ctaEnabled : defaults.ctaEnabled,
+    ctaLabel: String(rawOptions.ctaLabel ?? defaults.ctaLabel),
+    ctaUrl: String(rawOptions.ctaUrl ?? defaults.ctaUrl),
+    ctaShowAfterPlays: String(rawOptions.ctaShowAfterPlays ?? defaults.ctaShowAfterPlays)
   };
 };
 
@@ -78,6 +109,10 @@ export const normalizeVideoOptions = (inputOptions = {}) => {
     opacity: clamp(parseNumber(raw.opacity, 1), 0, 1),
     startTimeSec: Math.max(0, parseNumber(raw.startTimeSec, 0)),
     pauseWhenTargetLost: Boolean(raw.pauseWhenTargetLost),
-    restartOnTargetFound: Boolean(raw.restartOnTargetFound)
+    restartOnTargetFound: Boolean(raw.restartOnTargetFound),
+    ctaEnabled: Boolean(raw.ctaEnabled),
+    ctaLabel: normalizeCtaLabel(raw.ctaLabel),
+    ctaUrl: normalizeCtaUrl(raw.ctaUrl),
+    ctaShowAfterPlays: clampInteger(parseNumber(raw.ctaShowAfterPlays, 1), 1, 99)
   };
 };

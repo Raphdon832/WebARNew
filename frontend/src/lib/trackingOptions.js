@@ -11,7 +11,7 @@ const parseInteger = (value, fallback) => {
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 export const createDefaultTrackingOptions = () => ({
-  arEngine: "mindar",
+  arEngine: "8thwall",
   filterMinCF: "0.001",
   filterBeta: "4",
   warmupTolerance: "6",

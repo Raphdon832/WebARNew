@@ -298,7 +298,7 @@ const EditorCanvas = ({
   };
 
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div className="editor-preview" style={{ marginBottom: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <div>
           <h3 style={{ margin: 0, fontSize: 16 }}>Live Preview</h3>
