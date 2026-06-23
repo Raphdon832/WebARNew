@@ -8,6 +8,7 @@ import { normalizeLoadingScreenOptions } from "../lib/loadingScreenOptions";
 import { normalizeTrackingOptions } from "../lib/trackingOptions";
 import { patchMindARCameraSystem } from "../lib/mindARCamera";
 import { registerMindARPoseSmoothing } from "../lib/mindARPoseSmoothing";
+import { createViewerAnalyticsTracker } from "../lib/viewerAnalytics";
 import IdentifyngLogo from "../components/IdentifyngLogo";
 
 const parseNumber = (value, fallback) => {
@@ -69,6 +70,15 @@ const calculateVideoPlaneSize = (aspectRatio, markerAspectRatio, options) => {
     return { width: markerWidth, height: markerWidth / ratio };
   }
   return { width: markerHeight * ratio, height: markerHeight };
+};
+
+const didVideoWrapToStart = (previousTime, currentTime, duration) => {
+  if (!Number.isFinite(previousTime) || !Number.isFinite(currentTime)) return false;
+  if (!Number.isFinite(duration) || duration <= 0) return false;
+  if (currentTime >= previousTime) return false;
+
+  const boundaryWindow = Math.min(1.5, Math.max(0.35, duration * 0.18));
+  return previousTime >= duration - boundaryWindow && currentTime <= boundaryWindow;
 };
 
 const getViewportSize = () => {
@@ -282,6 +292,14 @@ const SCAN_OVERLAY_STYLES = `
   cursor: pointer;
 }
 
+.identifyng-loader-stage--launch {
+  width: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+  align-content: end;
+  padding: 24px 24px max(88px, calc(env(safe-area-inset-bottom, 0px) + 88px));
+}
+
 .identifyng-scan-frame {
   position: relative;
   width: min(62vw, 310px);
@@ -368,6 +386,7 @@ const Viewer = () => {
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [audioUnlockNeeded, setAudioUnlockNeeded] = useState(false);
   const [targetVisible, setTargetVisible] = useState(false);
+  const [videoCtaVisible, setVideoCtaVisible] = useState(false);
   const [markerAspectRatio, setMarkerAspectRatio] = useState(1);
   const [videoPlaneSize, setVideoPlaneSize] = useState({ width: 1, height: 1 });
   const [viewportSize, setViewportSize] = useState(getViewportSize);
@@ -378,6 +397,13 @@ const Viewer = () => {
   const targetVisibleRef = useRef(false);
   const effectiveVideoMutedRef = useRef(false);
   const audioUnlockInFlightRef = useRef(false);
+  const videoCtaCompletionCountRef = useRef(0);
+  const lastVideoTimeRef = useRef(null);
+  const analyticsRef = useRef(null);
+
+  const trackViewerEvent = useCallback((eventName, metadata = {}, options = {}) => {
+    analyticsRef.current?.track(eventName, metadata, options);
+  }, []);
 
   const selectedArEngine =
     project?.config?.trackingOptions?.arEngine === "8thwall" ? "8thwall" : "mindar";
@@ -436,6 +462,24 @@ const Viewer = () => {
   }, [slug, projectId]);
 
   useEffect(() => {
+    if (!project?.id) {
+      analyticsRef.current = null;
+      return undefined;
+    }
+
+    analyticsRef.current = createViewerAnalyticsTracker(project);
+    analyticsRef.current.track(
+      "viewer_opened",
+      { routeSlug: slug || "", routeProjectId: projectId || "" },
+      { once: true }
+    );
+
+    return () => {
+      analyticsRef.current = null;
+    };
+  }, [project, slug, projectId]);
+
+  useEffect(() => {
     document.title = project?.name ? `${project.name} | iDentifyng` : "iDentifyng";
   }, [project?.name]);
 
@@ -455,8 +499,11 @@ const Viewer = () => {
     setAudioEnabled(false);
     setAudioUnlockNeeded(false);
     setTargetVisible(false);
+    setVideoCtaVisible(false);
     targetVisibleRef.current = false;
     audioUnlockInFlightRef.current = false;
+    videoCtaCompletionCountRef.current = 0;
+    lastVideoTimeRef.current = null;
     mindArStartedRef.current = false;
   }, [slug, projectId]);
 
@@ -554,6 +601,81 @@ const Viewer = () => {
   useEffect(() => {
     effectiveVideoMutedRef.current = effectiveVideoMuted;
   }, [effectiveVideoMuted]);
+
+  useEffect(() => {
+    if (!arSessionReady) return;
+
+    trackViewerEvent("camera_permission_granted", { engine: selectedArEngine }, { once: true });
+    trackViewerEvent("ar_session_started", { engine: selectedArEngine }, { once: true });
+  }, [arSessionReady, selectedArEngine, trackViewerEvent]);
+
+  useEffect(() => {
+    if (!hasBootData || !resolvedContentUrl) return;
+
+    trackViewerEvent(
+      "content_loaded",
+      { contentType, engine: selectedArEngine },
+      { once: true }
+    );
+  }, [contentType, hasBootData, resolvedContentUrl, selectedArEngine, trackViewerEvent]);
+
+  useEffect(() => {
+    if (!cameraError) return;
+
+    trackViewerEvent(
+      "camera_permission_denied",
+      { message: cameraError, engine: selectedArEngine },
+      { once: true }
+    );
+    trackViewerEvent("viewer_error", {
+      code: "camera_error",
+      message: cameraError,
+      engine: selectedArEngine
+    });
+  }, [cameraError, selectedArEngine, trackViewerEvent]);
+
+  useEffect(() => {
+    const targetError = mindTargetError || eighthWallTargetError;
+    if (!targetError) return;
+
+    trackViewerEvent("viewer_error", {
+      code: "target_error",
+      message: targetError,
+      engine: selectedArEngine
+    });
+  }, [eighthWallTargetError, mindTargetError, selectedArEngine, trackViewerEvent]);
+
+  useEffect(() => {
+    if (!engineError) return;
+
+    trackViewerEvent("viewer_error", {
+      code: "engine_error",
+      message: engineError.message || String(engineError),
+      engine: selectedArEngine
+    });
+  }, [engineError, selectedArEngine, trackViewerEvent]);
+
+  useEffect(() => {
+    if (!videoError) return;
+
+    trackViewerEvent("viewer_error", {
+      code: "video_error",
+      message: videoError,
+      engine: selectedArEngine
+    });
+  }, [selectedArEngine, trackViewerEvent, videoError]);
+
+  useEffect(() => {
+    setVideoCtaVisible(false);
+    videoCtaCompletionCountRef.current = 0;
+    lastVideoTimeRef.current = null;
+  }, [
+    contentType,
+    resolvedContentUrl,
+    videoOptions.ctaEnabled,
+    videoOptions.ctaUrl,
+    videoOptions.ctaShowAfterPlays
+  ]);
 
   useEffect(() => {
     if (!isMindAREngine) {
@@ -730,10 +852,35 @@ const Viewer = () => {
     }
   }, [isEightWallEngine, ready, eighthWallTargetData]);
 
+  const recordVideoCompletionForCta = () => {
+    if (contentType !== "video") return;
+    trackViewerEvent("video_completed", {
+      ctaEnabled: Boolean(videoOptions.ctaEnabled),
+      ctaShowAfterPlays: videoOptions.ctaShowAfterPlays
+    });
+
+    if (!videoOptions.ctaEnabled || !videoOptions.ctaUrl) return;
+
+    videoCtaCompletionCountRef.current += 1;
+    if (videoCtaCompletionCountRef.current >= videoOptions.ctaShowAfterPlays) {
+      setVideoCtaVisible(true);
+      trackViewerEvent(
+        "cta_shown",
+        {
+          label: videoOptions.ctaLabel || "Learn More",
+          url: videoOptions.ctaUrl,
+          afterPlays: videoOptions.ctaShowAfterPlays
+        },
+        { dedupeKey: "cta_shown", once: true }
+      );
+    }
+  };
+
   const applyVideoStartTime = (videoEl) => {
     if (!videoEl) return;
     if (!Number.isFinite(videoEl.duration) || videoOptions.startTimeSec <= 0) return;
     if (videoOptions.startTimeSec >= videoEl.duration) return;
+    lastVideoTimeRef.current = null;
     videoEl.currentTime = videoOptions.startTimeSec;
   };
 
@@ -741,6 +888,7 @@ const Viewer = () => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
     if (!targetVisibleRef.current) return;
+    setTargetVisible(true);
 
     const shouldMute = effectiveVideoMutedRef.current;
     videoEl.muted = shouldMute;
@@ -845,6 +993,8 @@ const Viewer = () => {
   ]);
 
   const handleStartExperience = () => {
+    trackViewerEvent("launch_clicked", { auto: false }, { dedupeKey: "launch" });
+
     if (startsUnmutedFromStudio) {
       enableViewerAudio();
     }
@@ -868,11 +1018,13 @@ const Viewer = () => {
     const onTargetFound = () => {
       targetVisibleRef.current = true;
       setTargetVisible(true);
+      trackViewerEvent("marker_found", { engine: selectedArEngine });
     };
 
     const onTargetLost = () => {
       targetVisibleRef.current = false;
       setTargetVisible(false);
+      trackViewerEvent("marker_lost", { engine: selectedArEngine });
     };
 
     targetEl.addEventListener(targetFoundEvent, onTargetFound);
@@ -884,7 +1036,7 @@ const Viewer = () => {
       targetEl.removeEventListener(targetFoundEvent, onTargetFound);
       targetEl.removeEventListener(targetLostEvent, onTargetLost);
     };
-  }, [hasBootData, sceneStarted, isEightWallEngine]);
+  }, [hasBootData, sceneStarted, isEightWallEngine, selectedArEngine, trackViewerEvent]);
 
   useEffect(() => {
     if (!ready || !project || contentType !== "video") return;
@@ -902,14 +1054,23 @@ const Viewer = () => {
     const onCanPlay = () => {
       videoEl.playbackRate = videoOptions.playbackRate;
       applyVideoStartTime(videoEl);
+      trackViewerEvent("content_loaded", { source: "video_canplay" }, { once: true });
 
       if (targetVisibleRef.current) {
         playVideo();
       }
     };
 
+    const onVideoPlay = () => {
+      trackViewerEvent("video_started", {
+        muted: Boolean(videoEl.muted),
+        autoplay: Boolean(videoOptions.autoplay)
+      });
+    };
+
     const onTargetFound = () => {
       targetVisibleRef.current = true;
+      setTargetVisible(true);
       if (videoOptions.restartOnTargetFound) {
         applyVideoStartTime(videoEl);
       }
@@ -919,6 +1080,7 @@ const Viewer = () => {
 
     const onTargetLost = () => {
       targetVisibleRef.current = false;
+      setTargetVisible(false);
       if (videoOptions.pauseWhenTargetLost) {
         videoEl.pause();
       }
@@ -928,25 +1090,56 @@ const Viewer = () => {
       setVideoError(
         "Video failed to load. Try MP4 (H.264) or WebM and verify the uploaded file URL."
       );
+      trackViewerEvent("viewer_error", {
+        code: "video_playback_error",
+        message: "Video failed to load or play."
+      });
+    };
+
+    const onVideoEnded = () => {
+      recordVideoCompletionForCta();
+      lastVideoTimeRef.current = null;
+    };
+
+    const onVideoTimeUpdate = () => {
+      const currentTime = videoEl.currentTime;
+      if (didVideoWrapToStart(lastVideoTimeRef.current, currentTime, videoEl.duration)) {
+        recordVideoCompletionForCta();
+      }
+      lastVideoTimeRef.current = currentTime;
     };
 
     videoEl.addEventListener("loadedmetadata", updateVideoPlane);
     videoEl.addEventListener("canplay", onCanPlay);
+    videoEl.addEventListener("play", onVideoPlay);
+    videoEl.addEventListener("ended", onVideoEnded);
     videoEl.addEventListener("error", onVideoError);
+    videoEl.addEventListener("timeupdate", onVideoTimeUpdate);
+    videoEl.addEventListener("seeking", onVideoTimeUpdate);
+    videoEl.addEventListener("seeked", onVideoTimeUpdate);
+    const videoTimePoll = window.setInterval(onVideoTimeUpdate, 250);
     const targetFoundEvent = isEightWallEngine ? "xrextrasfound" : "targetFound";
     const targetLostEvent = isEightWallEngine ? "xrextraslost" : "targetLost";
     targetEl.addEventListener(targetFoundEvent, onTargetFound);
     targetEl.addEventListener(targetLostEvent, onTargetLost);
 
     updateVideoPlane();
+    lastVideoTimeRef.current = null;
     videoEl.pause();
 
     return () => {
       targetVisibleRef.current = false;
+      setTargetVisible(false);
       videoEl.pause();
+      window.clearInterval(videoTimePoll);
       videoEl.removeEventListener("loadedmetadata", updateVideoPlane);
       videoEl.removeEventListener("canplay", onCanPlay);
+      videoEl.removeEventListener("play", onVideoPlay);
+      videoEl.removeEventListener("ended", onVideoEnded);
       videoEl.removeEventListener("error", onVideoError);
+      videoEl.removeEventListener("timeupdate", onVideoTimeUpdate);
+      videoEl.removeEventListener("seeking", onVideoTimeUpdate);
+      videoEl.removeEventListener("seeked", onVideoTimeUpdate);
       targetEl.removeEventListener(targetFoundEvent, onTargetFound);
       targetEl.removeEventListener(targetLostEvent, onTargetLost);
     };
@@ -957,7 +1150,8 @@ const Viewer = () => {
     videoOptions,
     sceneStarted,
     markerAspectRatio,
-    isEightWallEngine
+    isEightWallEngine,
+    trackViewerEvent
   ]);
 
   useEffect(() => {
@@ -1007,8 +1201,9 @@ const Viewer = () => {
   useEffect(() => {
     if (!hasBootData) return;
     if (shouldWaitForStartGesture) return;
+    trackViewerEvent("launch_clicked", { auto: true }, { dedupeKey: "launch" });
     setSceneStarted(true);
-  }, [hasBootData, shouldWaitForStartGesture]);
+  }, [hasBootData, shouldWaitForStartGesture, trackViewerEvent]);
 
   useEffect(() => {
     if (!hasBootData || !sceneStarted) return;
@@ -1168,7 +1363,6 @@ const Viewer = () => {
       };
   const targetReady = isEightWallEngine ? eighthWallConfigured : Boolean(mindTargetSrc);
   const showBrandSplash = arSessionReady && !brandSplashComplete;
-  const showCoverLoading = Boolean(resolvedLoadingBackgroundUrl) && !showBrandSplash;
   const showLoadingOverlay =
     !sceneStarted ||
     !project ||
@@ -1183,8 +1377,13 @@ const Viewer = () => {
       !sceneStarted &&
       shouldWaitForStartGesture
   );
-  const startButtonText = loadingScreen.startButtonText || "Play";
   const loadingProgressPercent = Math.round(loadingProgress);
+  const showLaunchScreen = canClickStart && loadingProgressPercent >= 100;
+  const showCoverLoading =
+    Boolean(resolvedLoadingBackgroundUrl) &&
+    !showBrandSplash &&
+    (!shouldWaitForStartGesture || showLaunchScreen);
+  const startButtonText = loadingScreen.startButtonText || "Launch";
   const loadingLabel =
     !project
       ? "Fetching experience..."
@@ -1217,6 +1416,15 @@ const Viewer = () => {
       !targetVisible &&
       (scanInstructionText || loadingScreen.showScanAnimation)
   );
+  const showVideoCta = Boolean(
+    videoCtaVisible &&
+      contentType === "video" &&
+      videoOptions.ctaEnabled &&
+      videoOptions.ctaUrl &&
+      (targetVisible || targetVisibleRef.current) &&
+      !showLoadingOverlay
+  );
+  const videoCtaLabel = videoOptions.ctaLabel || "Learn More";
   const loadingOrbitIcons =
     contentType === "video"
       ? ["camera", "target", "video", "audio", "spark", "phone"]
@@ -1410,16 +1618,25 @@ const Viewer = () => {
         </p>
       )}
 
-      {canClickStart && (
-        <button
-          type="button"
-          className="identifyng-loader-button"
-          onClick={handleStartExperience}
-          style={loaderButtonStyles}
-        >
-          {startButtonText}
-        </button>
-      )}
+    </div>
+  );
+
+  const renderLaunchExperience = () => (
+    <div
+      className="identifyng-loader-stage identifyng-loader-stage--launch"
+      style={{
+        color: loaderTextColor,
+        textShadow: loaderOnImage ? "0 1px 16px rgba(0,0,0,0.42)" : "none"
+      }}
+    >
+      <button
+        type="button"
+        className="identifyng-loader-button"
+        onClick={handleStartExperience}
+        style={loaderButtonStyles}
+      >
+        {startButtonText}
+      </button>
     </div>
   );
 
@@ -1459,7 +1676,7 @@ const Viewer = () => {
             backgroundPosition: "center center"
           }}
         >
-          {renderLoadingExperience()}
+          {showLaunchScreen ? renderLaunchExperience() : renderLoadingExperience()}
         </div>
       )}
 
@@ -1506,6 +1723,50 @@ const Viewer = () => {
             </div>
           )}
         </div>
+      )}
+
+      {showVideoCta && (
+        <a
+          href={videoOptions.ctaUrl}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(event) => {
+            event.stopPropagation();
+            trackViewerEvent(
+              "cta_clicked",
+              { label: videoCtaLabel, url: videoOptions.ctaUrl },
+              { beacon: true }
+            );
+          }}
+          style={{
+            position: "fixed",
+            left: "50%",
+            bottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
+            zIndex: 36,
+            transform: "translateX(-50%)",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "max-content",
+            maxWidth: "min(340px, calc(100vw - 40px))",
+            minHeight: 44,
+            padding: "12px 20px",
+            borderRadius: 999,
+            border: "1px solid rgba(255,255,255,0.7)",
+            background: "rgba(255,255,255,0.94)",
+            color: "#102033",
+            boxShadow: "0 18px 42px rgba(0,0,0,0.28)",
+            textDecoration: "none",
+            textAlign: "center",
+            fontSize: 15,
+            fontWeight: 800,
+            lineHeight: 1.2,
+            overflowWrap: "anywhere",
+            backdropFilter: "blur(12px)"
+          }}
+        >
+          {videoCtaLabel}
+        </a>
       )}
 
       {videoError && (

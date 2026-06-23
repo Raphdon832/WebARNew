@@ -98,6 +98,7 @@ const Dashboard = () => {
                 <Link to={buildViewerPath(project)} target="_blank">
                   View
                 </Link>
+                <Link to={`/analytics/${project.id}`}>Analytics</Link>
                 <Link to={`/editor/${project.id}`}>Edit</Link>
                 <button
                   type="button"

@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import Analytics from "./pages/Analytics";
 import Dashboard from "./pages/Dashboard";
 import Editor from "./pages/Editor";
 import Viewer from "./pages/Viewer";
@@ -32,6 +33,14 @@ const Root = () => (
         element={
           <RequireAuth>
             <Dashboard />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/analytics/:projectId"
+        element={
+          <RequireAuth>
+            <Analytics />
           </RequireAuth>
         }
       />
