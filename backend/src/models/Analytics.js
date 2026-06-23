@@ -22,6 +22,9 @@ const ANALYTICS_EVENT_SET = new Set(ANALYTICS_EVENT_NAMES);
 const analyticsEventsCollection = db.collection("analyticsEvents");
 const dailyRollupsCollection = db.collection("analyticsDailyRollups");
 const uniqueViewersCollection = db.collection("analyticsUniqueViewers");
+const geoLookupCache = new Map();
+const GEO_LOOKUP_TIMEOUT_MS = 3500;
+const GEO_CACHE_LIMIT = 5000;
 
 const EVENT_TOTAL_KEYS = {
   viewer_opened: "views",
@@ -170,6 +173,72 @@ const getRequestIp = (req) =>
       req.connection?.remoteAddress ||
       ""
   );
+
+const isPrivateIp = (ip = "") =>
+  !ip ||
+  ip === "::1" ||
+  ip === "127.0.0.1" ||
+  ip.startsWith("10.") ||
+  ip.startsWith("192.168.") ||
+  /^172\.(1[6-9]|2\d|3[01])\./.test(ip) ||
+  ip.startsWith("fc") ||
+  ip.startsWith("fd") ||
+  ip.startsWith("fe80:");
+
+const normalizeLocationField = (value, fallback = "Unknown", maxLength = 80) =>
+  sanitizeString(value, fallback, maxLength);
+
+const normalizeLocation = (raw = {}) => ({
+  countryCode: normalizeLocationField(raw.countryCode || raw.country_code, "XX", 8).toUpperCase(),
+  country: normalizeLocationField(raw.country || raw.country_name),
+  region: normalizeLocationField(raw.region || raw.region_name || raw.regionName),
+  city: normalizeLocationField(raw.city),
+  timezone: normalizeLocationField(raw.timezone?.id || raw.timezone)
+});
+
+const emptyLocation = () => normalizeLocation({});
+
+const getGeoLookupUrl = (ip) => {
+  if (process.env.GEOIP_LOOKUP_URL) {
+    return process.env.GEOIP_LOOKUP_URL.replace("{ip}", encodeURIComponent(ip));
+  }
+  return `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,country,countryCode,regionName,city,timezone`;
+};
+
+const cacheLocation = (ip, location) => {
+  if (geoLookupCache.size >= GEO_CACHE_LIMIT) {
+    geoLookupCache.delete(geoLookupCache.keys().next().value);
+  }
+  geoLookupCache.set(ip, location);
+  return location;
+};
+
+const lookupLocation = async (ip) => {
+  if (isPrivateIp(ip)) return emptyLocation();
+  if (geoLookupCache.has(ip)) return geoLookupCache.get(ip);
+  if (typeof fetch !== "function") return emptyLocation();
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GEO_LOOKUP_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(getGeoLookupUrl(ip), {
+      headers: { Accept: "application/json" },
+      signal: controller.signal
+    });
+
+    if (!response.ok) return cacheLocation(ip, emptyLocation());
+    const data = await response.json();
+    if (data.success === false || data.status === "fail") {
+      return cacheLocation(ip, emptyLocation());
+    }
+    return cacheLocation(ip, normalizeLocation(data));
+  } catch (_err) {
+    return emptyLocation();
+  } finally {
+    clearTimeout(timeout);
+  }
+};
 
 const getHashSalt = () =>
   process.env.ANALYTICS_HASH_SALT ||
@@ -330,6 +399,9 @@ export const recordAnalyticsEvent = async ({ req, payload }) => {
 
   const now = new Date();
   const dateKey = getUtcDateKey(now);
+  const requestIp = getRequestIp(req);
+  const location =
+    event.eventName === "viewer_opened" ? await lookupLocation(requestIp) : emptyLocation();
   const fingerprintHash = createFingerprintHash(req, event);
   const eventRef = analyticsEventsCollection.doc();
   const rollupRef = dailyRollupsCollection.doc(`${event.projectId}_${dateKey}`);
@@ -339,6 +411,7 @@ export const recordAnalyticsEvent = async ({ req, payload }) => {
     ...event,
     owner: project.owner,
     slug: project.slug,
+    location,
     fingerprintHash,
     dateKey,
     createdAt: FieldValue.serverTimestamp()
@@ -372,6 +445,18 @@ export const recordAnalyticsEvent = async ({ req, payload }) => {
         const fieldKey = sanitizeFieldKey(label);
         setNestedValue(updates, `breakdowns.${key}.${fieldKey}`, FieldValue.increment(1));
         setNestedValue(updates, `breakdownLabels.${key}.${fieldKey}`, label);
+      });
+
+      [
+        ["country", `${location.countryCode} ${location.country}`.trim()],
+        ["region", location.region],
+        ["city", location.city],
+        ["timezone", location.timezone]
+      ].forEach(([key, label]) => {
+        const safeLabel = label || "Unknown";
+        const fieldKey = sanitizeFieldKey(safeLabel);
+        setNestedValue(updates, `breakdowns.${key}.${fieldKey}`, FieldValue.increment(1));
+        setNestedValue(updates, `breakdownLabels.${key}.${fieldKey}`, safeLabel);
       });
 
       if (!uniqueSnap?.exists) {
@@ -419,14 +504,22 @@ export const getProjectAnalyticsSummary = async ({ projectId, owner, from, to })
     browser: {},
     os: {},
     arEngine: {},
-    contentType: {}
+    contentType: {},
+    country: {},
+    region: {},
+    city: {},
+    timezone: {}
   };
   const breakdownLabels = {
     deviceType: {},
     browser: {},
     os: {},
     arEngine: {},
-    contentType: {}
+    contentType: {},
+    country: {},
+    region: {},
+    city: {},
+    timezone: {}
   };
   const recentErrors = [];
   const daily = snapshots.map((snapshot, index) => {
@@ -500,7 +593,11 @@ export const getProjectAnalyticsSummary = async ({ projectId, owner, from, to })
       browser: formatBreakdown(breakdowns.browser, breakdownLabels.browser),
       os: formatBreakdown(breakdowns.os, breakdownLabels.os),
       arEngine: formatBreakdown(breakdowns.arEngine, breakdownLabels.arEngine),
-      contentType: formatBreakdown(breakdowns.contentType, breakdownLabels.contentType)
+      contentType: formatBreakdown(breakdowns.contentType, breakdownLabels.contentType),
+      country: formatBreakdown(breakdowns.country, breakdownLabels.country),
+      region: formatBreakdown(breakdowns.region, breakdownLabels.region),
+      city: formatBreakdown(breakdowns.city, breakdownLabels.city),
+      timezone: formatBreakdown(breakdowns.timezone, breakdownLabels.timezone)
     },
     daily,
     recentErrors: recentErrors

@@ -253,6 +253,10 @@ const Analytics = () => {
             <BreakdownList title="Operating Systems" items={summary.breakdowns.os} />
             <BreakdownList title="AR Engines" items={summary.breakdowns.arEngine} />
             <BreakdownList title="Content Types" items={summary.breakdowns.contentType} />
+            <BreakdownList title="Top Countries" items={summary.breakdowns.country} />
+            <BreakdownList title="Top Regions" items={summary.breakdowns.region} />
+            <BreakdownList title="Top Cities" items={summary.breakdowns.city} />
+            <BreakdownList title="Timezones" items={summary.breakdowns.timezone} />
 
             <section className="analytics-panel analytics-panel--wide">
               <div className="analytics-panel-head">
