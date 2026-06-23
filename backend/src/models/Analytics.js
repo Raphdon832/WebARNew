@@ -93,6 +93,39 @@ const sanitizeFieldKey = (value, fallback = "unknown") => {
   return normalized || fallback;
 };
 
+const setNestedValue = (target, path, value) => {
+  const parts = path.split(".");
+  let cursor = target;
+
+  parts.slice(0, -1).forEach((part) => {
+    cursor[part] = cursor[part] || {};
+    cursor = cursor[part];
+  });
+
+  cursor[parts[parts.length - 1]] = value;
+};
+
+const readCounterMap = (data = {}, path) => {
+  const nested = path.split(".").reduce((cursor, key) => cursor?.[key], data);
+  const values = nested && typeof nested === "object" && !Array.isArray(nested) ? { ...nested } : {};
+  const prefix = `${path}.`;
+
+  Object.entries(data).forEach(([key, value]) => {
+    if (!key.startsWith(prefix)) return;
+    values[key.slice(prefix.length)] = value;
+  });
+
+  return values;
+};
+
+const readLabelMap = (data = {}, path) => {
+  const values = readCounterMap(data, path);
+  return Object.entries(values).reduce((result, [key, value]) => {
+    if (typeof value === "string") result[key] = value;
+    return result;
+  }, {});
+};
+
 const sanitizeMetadata = (metadata) => {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return {};
 
@@ -267,12 +300,23 @@ const formatBreakdown = (counts = {}, labels = {}) =>
     }))
     .sort((a, b) => b.count - a.count);
 
+const readRollupTotals = (rollup = {}) => {
+  const totals = { ...DEFAULT_TOTALS };
+  const values = readCounterMap(rollup, "totals");
+
+  Object.keys(DEFAULT_TOTALS).forEach((key) => {
+    totals[key] = Number(values[key] || 0);
+  });
+
+  return totals;
+};
+
 const serializeRollupDay = (date, rollup = {}) => {
-  const totals = mergeTotals({ ...DEFAULT_TOTALS }, rollup.totals);
+  const totals = readRollupTotals(rollup);
   return {
     date,
     ...totals,
-    eventCounts: rollup.eventCounts || {}
+    eventCounts: readCounterMap(rollup, "eventCounts")
   };
 };
 
@@ -310,24 +354,24 @@ export const recordAnalyticsEvent = async ({ req, payload }) => {
       owner: project.owner,
       slug: project.slug,
       dateKey,
-      updatedAt: FieldValue.serverTimestamp(),
-      [`eventCounts.${event.eventName}`]: FieldValue.increment(1)
+      updatedAt: FieldValue.serverTimestamp()
     };
+    setNestedValue(updates, `eventCounts.${event.eventName}`, FieldValue.increment(1));
 
     if (!rollupSnap.exists) {
       updates.createdAt = FieldValue.serverTimestamp();
     }
 
     if (totalKey) {
-      updates[`totals.${totalKey}`] = FieldValue.increment(1);
+      setNestedValue(updates, `totals.${totalKey}`, FieldValue.increment(1));
     }
 
     if (event.eventName === "viewer_opened") {
       ["deviceType", "browser", "os", "arEngine", "contentType"].forEach((key) => {
         const label = event[key] || "unknown";
         const fieldKey = sanitizeFieldKey(label);
-        updates[`breakdowns.${key}.${fieldKey}`] = FieldValue.increment(1);
-        updates[`breakdownLabels.${key}.${fieldKey}`] = label;
+        setNestedValue(updates, `breakdowns.${key}.${fieldKey}`, FieldValue.increment(1));
+        setNestedValue(updates, `breakdownLabels.${key}.${fieldKey}`, label);
       });
 
       if (!uniqueSnap?.exists) {
@@ -338,7 +382,7 @@ export const recordAnalyticsEvent = async ({ req, payload }) => {
           fingerprintHash,
           createdAt: FieldValue.serverTimestamp()
         });
-        updates["totals.uniqueViewers"] = FieldValue.increment(1);
+        setNestedValue(updates, "totals.uniqueViewers", FieldValue.increment(1));
       }
     }
 
@@ -387,8 +431,8 @@ export const getProjectAnalyticsSummary = async ({ projectId, owner, from, to })
   const recentErrors = [];
   const daily = snapshots.map((snapshot, index) => {
     const data = snapshot.exists ? snapshot.data() : {};
-    mergeTotals(totals, data.totals);
-    Object.entries(data.eventCounts || {}).forEach(([key, count]) => {
+    mergeTotals(totals, readRollupTotals(data));
+    Object.entries(readCounterMap(data, "eventCounts")).forEach(([key, count]) => {
       eventCounts[key] = (eventCounts[key] || 0) + Number(count || 0);
     });
 
@@ -396,8 +440,8 @@ export const getProjectAnalyticsSummary = async ({ projectId, owner, from, to })
       collectBreakdown(
         breakdowns[key],
         breakdownLabels[key],
-        data.breakdowns?.[key],
-        data.breakdownLabels?.[key]
+        readCounterMap(data, `breakdowns.${key}`),
+        readLabelMap(data, `breakdownLabels.${key}`)
       );
     });
 
@@ -410,6 +454,10 @@ export const getProjectAnalyticsSummary = async ({ projectId, owner, from, to })
 
   const ctaImpressions = totals.ctaImpressions;
   const ctaClicks = totals.ctaClicks;
+  const analyticsViews = totals.views;
+  totals.analyticsViews = analyticsViews;
+  totals.legacyViews = Number(project.viewCount || 0);
+  totals.views = Math.max(totals.views, totals.legacyViews);
 
   return {
     project: {
